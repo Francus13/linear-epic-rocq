@@ -289,38 +289,54 @@ Proof.
     lia.
 Qed.    
 
-Definition zero n : lctxt n := fun (x:nat) => 0.
+Definition flat_ctxt i n : lctxt n := fun (x:nat) => i. 
+Definition zero n : lctxt n := flat_ctxt 0 n.
 
-Lemma zero_scons : forall n, (zero (S n)) = (@cons _ n 0 (zero n)).
+Lemma flat_scons : forall i n, 
+    (flat_ctxt i (S n)) = (@cons _ n i (flat_ctxt i n)).
 Proof.
-  intros n.
+  intros i n.
   apply functional_extensionality.
   intros x.
   unfold cons.
   destruct x; auto.
 Qed.  
 
-Lemma zero_tail : forall n, (@tail _ n (zero (S n))) = zero n.
+Lemma flat_tail : forall i n, 
+    (@tail _ n (flat_ctxt i (S n))) = flat_ctxt i n.
 Proof.
-  intros n.
+  intros i n.
   apply functional_extensionality.
   intros x.
   unfold tail. reflexivity.
 Qed.  
 
-Lemma sum_zero_r : forall {n} (c : lctxt n),
-    c ⨥ (zero n) = c.
+Lemma sum_flat_r : forall {n} i (c : lctxt n),
+    c ⨥ (flat_ctxt i n) = fun (x:nat) => (c x) + i.
 Proof.
   intros. apply functional_extensionality.
-  intros. unfold sum. unfold zero. lia.
+  intros. unfold sum. unfold flat_ctxt. lia.
 Qed.
 
-Lemma sum_zero_l : forall {n} (c : lctxt n),
-    (zero n) ⨥ c = c.
+Lemma sum_flat_l : forall {n} i (c : lctxt n),
+    (flat_ctxt i n) ⨥ c = fun (x:nat) => (c x) + i.
 Proof.
   intros. apply functional_extensionality.
-  intros. reflexivity.
+  intros. unfold sum. unfold flat_ctxt. lia.
 Qed.
+
+Lemma zero_scons : forall n, (zero (S n)) = (@cons _ n 0 (zero n)).
+Proof. exact (flat_scons 0). Qed. 
+Lemma zero_tail : forall n, (@tail _ n (zero (S n))) = zero n.
+Proof. exact (flat_tail 0). Qed. 
+Lemma sum_zero_r : forall {n} (c : lctxt n),
+    c ⨥ (zero n) = c.
+Proof. intros. apply functional_extensionality.
+  intros. unfold zero. rewrite (sum_flat_r 0 c). lia. Qed.
+Lemma sum_zero_l : forall {n} (c : lctxt n),
+    (zero n) ⨥ c = c.
+Proof. intros. apply functional_extensionality.
+  intros. unfold zero. rewrite (sum_flat_l 0 c). lia. Qed. 
 
 Lemma sum_assoc : forall {n} (c : lctxt n) (d : lctxt n) (e : lctxt n),
     c ⨥ (d ⨥ e) = (c ⨥ d) ⨥ e.
@@ -507,6 +523,27 @@ Module Renamings.
     destruct (lt_dec x n); auto.
     contradiction.
   Qed.
+
+  (* Renaming by the identity does nothing. *)
+
+Lemma map_ren_id :
+  forall (l : list nat)
+    (n : nat)
+    (HRS : Forall (fun x : nat => x < n) l),
+    map (ren_id n) l = l.
+Proof.
+  induction l; intros; simpl.
+  (* Nil *)
+  - reflexivity.
+  (* Cons *)
+  - inversion HRS; subst.
+    rewrite IHl; auto.
+    unfold ren_id.
+    destruct (lt_dec a n); auto.
+  lia.
+Qed.  
+
+
 
   Definition ren_shift {n m:nat} (k:nat) (r : ren n m) : ren (k + n) (k + m) :=
     ctxt_app (ren_id k) (fun x => k + (r x)).
@@ -2064,7 +2101,7 @@ Proof.
   apply functional_extensionality.
   intros x.
   assert ((c1 ⨥ c2) x = zero n x). { rewrite H. reflexivity. }
-  unfold sum, zero in *.
+  unfold sum, zero, flat_ctxt in *.
   lia.
 Qed.
 
@@ -2075,7 +2112,7 @@ Proof.
   apply functional_extensionality.
   intros x.
   assert ((c1 ⨥ c2) x = zero n x). { rewrite H. reflexivity. }
-  unfold sum, zero in *.
+  unfold sum, zero, flat_ctxt in *.
   lia.
 Qed.
 
@@ -2085,7 +2122,7 @@ Proof.
   unfold ctxt_eq.
   intros.
   assert ((c1 ⨥ c2) x = zero n x). { rewrite H. reflexivity. auto. }
-  unfold sum, zero in *.
+  unfold sum, zero, flat_ctxt in *.
   lia.
 Qed.
 
@@ -2095,7 +2132,7 @@ Proof.
   unfold ctxt_eq.
   intros.
   assert ((c1 ⨥ c2) x = zero n x). { rewrite H. reflexivity. auto. }
-  unfold sum, zero in *.
+  unfold sum, zero, flat_ctxt in *.
   lia.
 Qed.
 
@@ -2108,7 +2145,7 @@ Qed.
 
 Lemma app_delta_zero_inv_lt :
   forall n m (c : lctxt m) x y,
-    y <> 0 ->
+    y > 0 ->
     x < m + n ->
     (m + n)[x ↦ y] = c ⊗ (zero n)
     ->
@@ -2116,7 +2153,7 @@ Lemma app_delta_zero_inv_lt :
 Proof.
   intros.
   apply fun_apply with (x:=x) in H1.
-  unfold delta, ctxt_app, zero in H1.
+  unfold delta, ctxt_app, zero, flat_ctxt in H1.
   destruct (lt_dec x (m + n)); auto.
   destruct (Nat.eq_dec x x); try lia.
   destruct (lt_dec x m); try lia.
@@ -2134,7 +2171,7 @@ Proof.
   unfold ctxt_eq.
   intros.
   specialize (H1 x H0).
-  unfold delta, ctxt_app, zero in H1.
+  unfold delta, ctxt_app, zero, flat_ctxt in H1.
   destruct (lt_dec x (m + n)); auto.
   destruct (Nat.eq_dec x x); try lia.
   destruct (lt_dec x m); try lia.
@@ -2154,7 +2191,7 @@ Proof.
   assert (x < m). { eapply app_delta_zero_inv_lt_eq; eauto. } 
   assert (x0 < m + n) by lia.
   specialize (H1 x0 H4).
-  unfold delta, ctxt_app, zero in *.
+  unfold delta, ctxt_app, zero, flat_ctxt in *.
   destruct (lt_dec x m); try lia.
   destruct (lt_dec x (m + n)); try lia.
   destruct (Nat.eq_dec x x0); try lia.
@@ -2169,7 +2206,7 @@ Lemma delta_app_zero_r :
 Proof.
 intros.
 apply functional_extensionality.
-unfold ctxt_app, delta, zero.
+unfold ctxt_app, delta, zero, flat_ctxt.
 intros x0. 
 destruct (lt_dec x0 m).
 destruct (lt_dec x m); try lia.
@@ -2187,7 +2224,7 @@ Lemma delta_app_zero_l :
 Proof.
 intros.
 apply functional_extensionality.
-unfold ctxt_app, delta, zero.
+unfold ctxt_app, delta, zero, flat_ctxt.
 intros x0. 
 destruct (lt_dec x0 n).
 destruct (lt_dec (n+x) (n+m)); try lia.
@@ -2227,7 +2264,7 @@ unfold ctxt_eq.
 intros.
 apply fun_apply with (x:=x) in H.
 unfold ctxt_app, delta, sum in *.
-unfold zero in H.
+unfold zero, flat_ctxt in H.
 symmetry in H; destruct (lt_dec x n').
 - repeat match goal with
            | [ |- _ ] => destruct (lt_dec _ (n' + n)) in H; try lia

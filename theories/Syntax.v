@@ -50,6 +50,9 @@ Definition fvar := nat.
 
      - two processes running "in parallel": [par P1 P2]
 
+     - a null process: [nul]. Null does no computation,
+       acting as the unit to par.
+
    # Operands:
 
    An operand [o] provides a definition of a resource identifier and
@@ -72,6 +75,7 @@ with proc :=
 | def (r:rvar) (o:oper)  (* r <- o *)
 | app (f:fvar) (r:rvar)  (* f r *)
 | par (P1 P2 : proc)     (* P1 | P2 *)
+| nul
 
 with oper :=
 | emp                    (* empty tuple *)
@@ -139,6 +143,10 @@ with ws_proc : nat -> nat -> proc -> Prop :=
     (WSP1 : ws_proc m n P1)
     (WSP2 : ws_proc m n P2),
     ws_proc m n (par P1 P2)
+
+| ws_nul :
+  forall m n,
+    ws_proc m n nul
             
 with ws_oper : nat -> nat -> oper -> Prop :=
 |ws_emp :
@@ -169,6 +177,8 @@ Scheme ws_term_ind := Induction for ws_term Sort Prop
                         with ws_oper_ind := Induction for ws_oper Sort Prop.
 
 Combined Scheme ws_tpo_ind from ws_term_ind, ws_proc_ind, ws_oper_ind.
+
+
 
 (* Structural Equivalence --------------------------------------------------- *)
 
@@ -250,6 +260,10 @@ Infix "≈t" := seq_term (at level 55).
 Infix "≈p" := seq_proc (at level 55).
 Infix "≈o" := seq_oper (at level 55).
 
+
+
+(* Proving Structural Equivalence is Refl/Symm/Trans *)
+
 Lemma tpo_seq_reflexive :
   (forall (t : term), t ≈t t) /\
     (forall (P : proc), P ≈p P) /\
@@ -282,21 +296,15 @@ Lemma tpo_seq_transitive :
     (forall (o1 o2 o3 : oper), o1 ≈o o2 -> o2 ≈o o3 -> o1 ≈o o3).
 Proof.
   apply tpo_ind; intros.
-  - inversion H0. subst.
-    inversion H1. subst.
-    constructor. eapply H; eauto. 
-  - eapply seq_proc_trans; eauto.
-  - eapply seq_proc_trans; eauto.
-  - eapply seq_proc_trans; eauto.
-  - inversion H; subst.
-    inversion H0; subst.
-    reflexivity.
-  - inversion H; subst.
-    inversion H0; subst.
-    reflexivity.
-  - inversion H; subst.
-    inversion H0; subst.
-    reflexivity.
+  (* Process Equivalence is transitive by construction *)
+  all: try solve [eapply seq_proc_trans; eauto].
+  (* Operand Equivalence, excepting lambdas, has only the refl constructor *)
+  all: try solve [inversion H; subst; inversion H0; subst; reflexivity].
+  (* Bag Equivalence *)
+  - inversion H0; subst.
+    inversion H1; subst.
+    constructor. eapply H; eauto.
+  (* Lambda Equivalence *)
   - inversion H1; subst; auto.
     inversion H0; subst; auto.
     econstructor.
@@ -327,11 +335,13 @@ Lemma tpo_seq_symmetric :
     (forall (o1 o2 : oper), o1 ≈o o2 -> o2 ≈o o1).
 Proof.
   apply tpo_ind; intros; auto.
-  - inversion H0. subst.
+  (* Process Equivalence is symmetric by construction (via auto) *)
+  (* Operand Equivalence, excepting lambdas, has only the refl constructor *)
+  all: try solve [inversion H; reflexivity].
+  (* Bag Equivalence *)
+  - inversion H0; subst.
     constructor. apply H. assumption.
-  - inversion H. reflexivity.
-  - inversion H. reflexivity.
-  - inversion H. reflexivity.
+  (* Lambda Equivalence *)
   - inversion H0; subst; auto.
 Qed.
 
@@ -353,6 +363,8 @@ Proof.
   apply tpo_seq_symmetric.
 Qed.
 
+
+
 (* structural equivalence "inversion" lemmas:
    - these lemmas extract information about the structure of a
      piece of syntax that is known to be structurally equivalent
@@ -365,26 +377,26 @@ Lemma seq_proc_inv_def' : forall P1 P2,
       (forall r o, P2 = def r o -> exists o', P1 = def r o' /\ o ≈o o').
 Proof.
   intros P1 P2 H.
-  induction H; intros.
+  induction H.
+  (* Equivalence cases unapplicable to def processes *)
+  all: try solve [split; try clear H; intros; discriminate H].
+  (* Reflexivity *)
   - split; intros; exists o; auto.
-  - split; intros.
-    + apply IHseq_proc in H0. assumption.
-    + apply IHseq_proc in H0. assumption.
-  - split; intros.
-    apply IHseq_proc1 in H1.
-    destruct H1 as [o' [HP2 Ho']].
-    apply IHseq_proc2 in HP2.
-    destruct HP2 as [o'' [HP3 Ho'']].
-    exists o''. split; eauto. eapply transitivity; eauto.
-    apply IHseq_proc2 in H1.
-    destruct H1 as [o' [HP2 Ho']].
-    apply IHseq_proc1 in HP2.
-    destruct HP2 as [o'' [HP3 Ho'']].
-    exists o''. split; eauto. eapply transitivity; eauto.
-  - split; intros; inversion H.
-  - split; intros; inversion H.
-  - split; intros; inversion H.
-  - split; intros; inversion H1.
+  (* Symmetry *)
+  - split; intros; apply IHseq_proc in H0; auto.
+  (* Transitivity *)
+  - split; intros. 
+    + apply IHseq_proc1 in H1.
+      destruct H1 as [o' [HP2 Ho']].
+      apply IHseq_proc2 in HP2.
+      destruct HP2 as [o'' [HP3 Ho'']].
+      exists o''. split; eauto. eapply transitivity; eauto.
+    + apply IHseq_proc2 in H1.
+      destruct H1 as [o' [HP2 Ho']].
+      apply IHseq_proc1 in HP2.
+      destruct HP2 as [o'' [HP3 Ho'']].
+      exists o''. split; eauto. eapply transitivity; eauto.
+  (* Def Congruence *)
   - split; intros.
     + inversion H0. subst. exists o2. split; auto.
     + inversion H0. subst. exists o1. split; auto.
@@ -417,10 +429,15 @@ Lemma seq_proc_inv_app' : forall P1 P2,
 Proof.
   intros P1 P2 H.
   induction H.
+  (* Equivalence cases unapplicable to app processes *)
+  all: try solve [split; try clear H; intros; discriminate H].
+  (* Reflexivity *)
   - split; intros; auto.
+  (* Symmetry *)
   - split; intros; subst.
     + eapply IHseq_proc; auto.
     + eapply IHseq_proc; auto.
+  (* Transitivity *)
   - split; intros.
     + eapply IHseq_proc2.
       eapply IHseq_proc1.
@@ -428,13 +445,16 @@ Proof.
     + eapply IHseq_proc1.
       eapply IHseq_proc2.
       auto.
-  - split; intros; inversion H.
-  - split; intros; inversion H.
-  - split; intros; inversion H.
-  - split; intros; inversion H1.
-  - split; intros; inversion H0.
 Qed.    
 
+Lemma seq_proc_inv_app_l : forall f r P,
+    P ≈p app f r -> P = app f r.
+Proof.
+  intros.
+  apply seq_proc_inv_app' in H.
+  apply H.
+  reflexivity.
+Qed.
 
 Lemma seq_proc_inv_app_r : forall f r P,
     app f r ≈p P -> P = app f r.
@@ -445,14 +465,7 @@ Proof.
   reflexivity.
 Qed.
 
-Lemma seq_proc_inv_app_l : forall f r P,
-    P ≈p app f r -> P = app f r.
-Proof.
-  intros.
-  apply seq_proc_inv_app' in H.
-  apply H.
-  reflexivity.
-Qed.
+
 
 (* Well Formedness ---------------------------------------------------------- *)
 
@@ -488,19 +501,24 @@ Qed.
  *)
 
 Unset Elimination Schemes.
-Inductive wf_term : forall (m n:nat), lctxt m -> lctxt n -> term -> Prop :=
+
+(* (wf_term m n t) iff t is a well-formed bag with:
+    1) m free and *undefined* unrestricted variables
+    2) n free restricted variables appearing *exactly* once in t
+
+  G and D track free variables that may occur.
+  Free function variables (in G) should not be defined and so mapped to 0,
+  and free resource variables (in D) should appear exactly once. *)
+Inductive wf_term : forall (m n:nat), term -> Prop :=
 | wf_bag :
-  forall m n
+  forall m n m' n'
     (G : lctxt m)
     (D : lctxt n)
-    m' n'
-    (G' : lctxt m')
-    (D' : lctxt n')
-    (UG' : forall x, x < m' -> (G' x) = 1)
-    (UD' : forall x, x < n' -> (D' x) = 2 \/ (D' x) = 0)
+    (UG : forall x, x < m -> (G x) = 1)
+    (UD : forall x, x < n -> (D x) = 2 \/ (D x) = 0)
     (P : proc)
-    (WFP : wf_proc (m' + m) (n' + n) (G' ⊗ G) (D' ⊗ D) P),
-    wf_term m n G D (bag m' n' P)
+    (WFP : wf_proc (m' + m) (n' + n) (G ⊗ (zero m')) (D ⊗ (flat_ctxt 1 n')) P),
+    wf_term m' n' (bag m n P)
 
 with wf_proc : forall (m n:nat), lctxt m -> lctxt n -> proc -> Prop :=
 | wf_def :
@@ -532,6 +550,13 @@ with wf_proc : forall (m n:nat), lctxt m -> lctxt n -> proc -> Prop :=
     (HG : G ≡[m] (G1 ⨥ G2))
     (HD : D ≡[n] (D1 ⨥ D2)),
     wf_proc m n G D (par P1 P2)
+
+| wf_nul :
+  forall m n
+    (G : lctxt m) (D : lctxt n)
+    (HG : G ≡[m] (zero m))
+    (HD : D ≡[n] (zero n)),
+    wf_proc m n G D nul
             
 with wf_oper : forall (m n:nat), lctxt m -> lctxt n -> oper -> Prop :=
 | wf_emp :
@@ -565,7 +590,7 @@ with wf_oper : forall (m n:nat), lctxt m -> lctxt n -> oper -> Prop :=
     (HG : G ≡[m] (zero m))
     (HD : D ≡[n] (zero n))
     (t : term)
-    (WFT : wf_term m 1 (zero m) (1[0 ↦ 1]) t),
+    (WFT : wf_term m 1 t),
     wf_oper m n G D (lam t).
 Set Elimination Schemes.
 
@@ -584,202 +609,147 @@ Ltac existT_eq :=
           apply Eqdep_dec.inj_pair2_eq_dec in H; [| apply Nat.eq_dec]
       end.
 
+
+
 (* Prove that well-formedness respects structural equivalence. *)
 
 (* It seems that the trick for this proof is to close under commutatitivy explicitly. *)
 Lemma tpo_wf_seq :
   (forall t1 t2,
       t1 ≈t t2 ->
-     (forall m n G D,
-      wf_term m n G D t1 ->
-      wf_term m n G D t2)
+     (forall m n,
+      wf_term m n t1 ->
+      wf_term m n t2)
      /\
-     (forall m n G D,
-      wf_term m n G D t2 ->
-      wf_term m n G D t1))
+     (forall m n,
+      wf_term m n t2 ->
+      wf_term m n t1))
        
   /\
-    (forall P1 P2,
-        P1 ≈p P2 ->
-        (forall m n G D,
-            wf_proc m n G D P1 ->
-            wf_proc m n G D P2)
+  (forall P1 P2,
+      P1 ≈p P2 ->
+      (forall m n G D,
+          wf_proc m n G D P1 ->
+          wf_proc m n G D P2)
 
-        /\
-          (forall m n G D,
-            wf_proc m n G D P2 ->
-            wf_proc m n G D P1)
-    )
-      
+      /\
+        (forall m n G D,
+          wf_proc m n G D P2 ->
+          wf_proc m n G D P1))
   /\
-    (forall o1 o2,
-        o1 ≈o o2 ->
-        (forall m n G D,
-            wf_oper m n G D o1 ->
-            wf_oper m n G D o2)
-        /\
-        (forall m n G D,
-            wf_oper m n G D o2 ->
-            wf_oper m n G D o1)
-    ).
+  (forall o1 o2,
+      o1 ≈o o2 ->
+      (forall m n G D,
+          wf_oper m n G D o1 ->
+          wf_oper m n G D o2)
+      /\
+      (forall m n G D,
+          wf_oper m n G D o2 ->
+          wf_oper m n G D o1)).
 Proof.
   apply seq_tpo_ind; intros.
-  - destruct H as [HL HR].
-    split; intros.
-    + inversion H; subst.
-      eapply wf_bag; eauto.
-    + inversion H; subst.
-      eapply wf_bag; eauto.
-  - repeat split; intros; try assumption.
-  - tauto.
+  (* Reflexive and Symmetric Eq cases *)
+  all: try solve [tauto].
+  (* Congruence cases *)
+  all: try solve [
+    destruct H as [HL1 HR1];
+    try destruct H0 as [HL2 HR2];
+    split; intros;
+    inversion H; existT_eq; subst;
+    econstructor; eauto
+  ].
+  (* Process Eq Transitive *)
   - destruct H as [HL1 HR1].
     destruct H0 as [HL2 HR2].
     split; intros.
-    + eapply HL2. eapply HL1. assumption.
-    + eapply HR1. eapply HR2. assumption.
+    + apply HL2. apply HL1. assumption.
+    + apply HR1. apply HR2. assumption.
+  (* Par Commute *)
   - split; intros.
-    + inversion H; 
-      existT_eq;
-      subst.
-      rewrite sum_commutative in HG. rewrite (@sum_commutative _ D1 D2) in HD.
-      eapply wf_par; eauto.
-    + inversion H; existT_eq; subst.
-      rewrite sum_commutative in HG. rewrite (@sum_commutative _ D1 D2) in HD.
-      eapply wf_par; eauto.
+    all: inversion H; existT_eq; subst.
+    all: rewrite sum_commutative in HG; rewrite (@sum_commutative _ D1 D2) in HD.
+    all: eapply wf_par; eauto.
+  (* Par Associate 1 *)
   - split; intros.
-    + inversion H; existT_eq; subst. inversion WFP2; existT_eq; subst.
+    all: inversion H; subst. 
+    + inversion WFP2; existT_eq; subst.
       eapply wf_par; eauto.
       eapply wf_par; eauto.
-      reflexivity.
-      reflexivity.
-      rewrite <- sum_assoc. rewrite <- HG0. assumption.
-      rewrite <- sum_assoc. rewrite <- HD0. assumption.
-      
-    + inversion H; existT_eq; subst. inversion WFP1; existT_eq; subst.
+      * reflexivity.
+      * reflexivity.
+      * rewrite <- sum_assoc. rewrite <- HG0. assumption.
+      * rewrite <- sum_assoc. rewrite <- HD0. assumption.
+    + inversion WFP1; existT_eq; subst.
       eapply wf_par; eauto.
       eapply wf_par; eauto.
-      reflexivity.
-      reflexivity.
-      rewrite sum_assoc. rewrite <- HG0. assumption.
-      rewrite sum_assoc. rewrite <- HD0. assumption.
+      * reflexivity.
+      * reflexivity.
+      * rewrite sum_assoc. rewrite <- HG0. assumption.
+      * rewrite sum_assoc. rewrite <- HD0. assumption.
+  (* Par Associate 2 (mostly same as above) *)
   - split; intros.
-    + inversion H; existT_eq; subst. inversion WFP1; existT_eq; subst.
+    all: inversion H; subst. 
+    + inversion WFP1; existT_eq; subst.
       eapply wf_par; eauto.
       eapply wf_par; eauto.
-      reflexivity.
-      reflexivity.
-      rewrite sum_assoc. rewrite <- HG0. assumption.
-      rewrite sum_assoc. rewrite <- HD0. assumption.
-    + inversion H; existT_eq; subst. inversion WFP2; existT_eq; subst.
+      * reflexivity.
+      * reflexivity.
+      * rewrite sum_assoc. rewrite <- HG0. assumption.
+      * rewrite sum_assoc. rewrite <- HD0. assumption.
+    + inversion WFP2; existT_eq; subst.
       eapply wf_par; eauto.
       eapply wf_par; eauto.
-      reflexivity.
-      reflexivity.
-      rewrite <- sum_assoc. rewrite <- HG0. assumption.
-      rewrite <- sum_assoc. rewrite <- HD0. assumption.
-  - destruct H as [HL1 HR1].
-    destruct H0 as [HL2 HR2].
-    split; intros.
-    + inversion H; existT_eq; subst.
-      eapply wf_par; eauto.
-    + inversion H; existT_eq; subst.
-      eapply wf_par; eauto.
-  - destruct H as [HL HR].
-    split; intros.
-    + inversion H; existT_eq; subst.
-      eapply wf_def; eauto.
-    + inversion H; existT_eq; subst.
-      eapply wf_def; eauto.
-  - split; intros; auto.
-  - destruct H as [HL HR].
-    split; intros.
-    + inversion H; existT_eq; subst.
-      apply wf_lam; auto.
-    + inversion H; existT_eq; subst.
-      apply wf_lam; auto.
+      * reflexivity.
+      * reflexivity.
+      * rewrite <- sum_assoc. rewrite <- HG0. assumption.
+      * rewrite <- sum_assoc. rewrite <- HD0. assumption.
 Qed.
 
-Lemma wf_seq_term : 
-  (forall t1 t2,
-      t1 ≈t t2 ->
-     (forall m n G D,
-      wf_term m n G D t1 ->
-      wf_term m n G D t2)).
-Proof.
-  apply tpo_wf_seq.
-Qed.
+Lemma wf_seq_term : forall t1 t2 m n, 
+  t1 ≈t t2 -> wf_term m n t1 -> wf_term m n t2.
+Proof. intros t1 t2 m n H; generalize t1 t2 H m n. apply tpo_wf_seq. Qed.
+Lemma wf_seq_proc : forall P1 P2 m n G D, 
+  P1 ≈p P2 -> wf_proc m n G D P1 -> wf_proc m n G D P2.
+Proof. intros P1 P2 m n G D H; generalize P1 P2 H m n G D. apply tpo_wf_seq. Qed.
+Lemma wf_seq_oper : forall o1 o2 m n G D, 
+  o1 ≈o o2 -> wf_oper m n G D o1 -> wf_oper m n G D o2.
+Proof. intros o1 o2 m n G D H; generalize o1 o2 H m n G D. apply tpo_wf_seq. Qed.
 
-Lemma wf_seq_proc :
-   (forall P1 P2,
-        P1 ≈p P2 ->
-        (forall m n G D,
-            wf_proc m n G D P1 ->
-            wf_proc m n G D P2)).
-Proof.
-  apply tpo_wf_seq.
-Qed.  
 
-Lemma wf_seq_oper :
-    (forall o1 o2,
-        o1 ≈o o2 ->
-        (forall m n G D,
-            wf_oper m n G D o1 ->
-            wf_oper m n G D o2)).
-Proof.
-  apply tpo_wf_seq.
-Qed.  
- 
+
+(* Prove that well-formedness respects context equivalence. *)
 Lemma tpo_equiv_wf :
-  (forall m n G1 D1 t,
-      wf_term m n G1 D1 t ->
+(* The first element is trivial, but allows using wf_tpo_ind *)
+  (forall m n t,
+      wf_term m n t ->
+      True)
+  /\
+  (forall m n G1 D1 P,
+      wf_proc m n G1 D1 P ->
       forall G2 D2,
-      G1 ≡[m] G2 ->
-      D1 ≡[n] D2 ->
-      wf_term m n G2 D2 t)
+    G1 ≡[m] G2 ->
+    D1 ≡[n] D2 ->
+      wf_proc m n G2 D2 P)
   /\
-    (forall m n G1 D1 P,
-        wf_proc m n G1 D1 P ->
-        forall G2 D2,
-      G1 ≡[m] G2 ->
-      D1 ≡[n] D2 ->
-        wf_proc m n G2 D2 P)
-  /\
-    (forall m n G1 D1 o,
-        wf_oper m n G1 D1 o ->
-        forall G2 D2,
-      G1 ≡[m] G2 ->
-      D1 ≡[n] D2 ->
-        wf_oper m n G2 D2 o).
+  (forall m n G1 D1 o,
+      wf_oper m n G1 D1 o ->
+      forall G2 D2,
+    G1 ≡[m] G2 ->
+    D1 ≡[n] D2 ->
+      wf_oper m n G2 D2 o).
 Proof.
-  apply wf_tpo_ind; intros; eauto.
-  - apply wf_bag with (G' := G')(D' := D'); auto.
-    apply H.
-    rewrite H0. reflexivity.
-    rewrite H1. reflexivity.
-  - eapply wf_def; eauto.
-    eapply transitivity. symmetry. apply H1. apply HD.
-    apply H; auto. reflexivity.
-  - eapply wf_app; eauto.
-    eapply transitivity. symmetry.  eauto. eauto.
-    eapply transitivity. symmetry.  eauto. eauto.
-  - eapply wf_par; eauto.
-    eapply transitivity. symmetry.  eauto. eauto.
-    eapply transitivity. symmetry.  eauto. eauto.
-  - eapply wf_emp; eauto.
-    eapply transitivity. symmetry.  eauto. eauto.
-    eapply transitivity. symmetry.  eauto. eauto.
-  - eapply wf_tup; eauto.
-    eapply transitivity. symmetry.  eauto. eauto.
-    eapply transitivity. symmetry.  eauto. eauto.
-  - eapply wf_bng; eauto.
-    eapply transitivity. symmetry.  eauto. eauto.
-    eapply transitivity. symmetry.  eauto. eauto.
-  - eapply wf_lam; eauto.
-    eapply transitivity. symmetry.  eauto. eauto.
-    eapply transitivity. symmetry.  eauto. eauto.
+  apply wf_tpo_ind; intros.
+  (* All cases are by transitivity:
+      from G1 ≡[m] G2 in the premise and G1 ≡[m] ?G from inverting wf, 
+      we get G2 ≡[m] ?G to reconstruct wf *)
+  all:
+    econstructor; eauto;
+    try (eapply transitivity; eauto; symmetry; eauto).
+  (* Rocq needs help for Def *)
+  - apply H; auto. reflexivity.
 Qed.  
 
-#[global] Instance Proper_wf_term {m n:nat}: Proper ((@ctxt_eq nat m) ==> (@ctxt_eq nat n) ==> seq_term ==> iff) (wf_term m n).
+(* #[global] Instance Proper_wf_term {m n:nat}: Proper ((@ctxt_eq nat m) ==> (@ctxt_eq nat n) ==> seq_term ==> iff) (wf_term m n).
 Proof.
   repeat red; intros; subst.
   split; intros.
@@ -790,8 +760,7 @@ Proof.
     symmetry in H1.
     eapply tpo_equiv_wf; eauto.
     eapply wf_seq_term; eauto.
-Qed.  
-  
+Qed.   *)
 
 #[global] Instance Proper_wf_term_proc {m n : nat} : Proper ((@ctxt_eq nat m) ==> (@ctxt_eq nat n) ==> seq_proc ==> iff) (wf_proc m n).
 Proof.
@@ -819,53 +788,44 @@ Proof.
     eapply wf_seq_oper; eauto.
 Qed.
 
+
+
 (* Every well formed piece of syntax is also well scoped *)
 Lemma tpo_wf_ws :
-  (forall m n G D t,
-      wf_term m n G D t ->
+  (forall m n t,
+      wf_term m n t ->
       ws_term m n t)
   /\
-    (forall m n G D P,
-        wf_proc m n G D P ->
-        ws_proc m n P)
-  /\
-    (forall m n G D o,
-        wf_oper m n G D o ->
-        ws_oper m n o).
-Proof.
-  apply wf_tpo_ind; intros; constructor; auto.
-Qed.  
-
-Lemma wf_ws_term :
-(forall m n G D t,
-      wf_term m n G D t ->
-      ws_term m n t).
-Proof.
-  apply tpo_wf_ws.
-Qed.
-
-Lemma wf_ws_proc : 
   (forall m n G D P,
       wf_proc m n G D P ->
-      ws_proc m n P).
-Proof. 
-  apply tpo_wf_ws.
-Qed.
-
-Lemma wf_ws_oper :
+      ws_proc m n P)
+  /\
   (forall m n G D o,
       wf_oper m n G D o ->
       ws_oper m n o).
 Proof.
-  apply tpo_wf_ws.
-Qed.
+  apply wf_tpo_ind; intros. 
+  (* All cases are trivial *)
+  all: constructor; auto.
+  (* Rocq needs help for Bag *)
+  - rewrite (Nat.add_comm m), (Nat.add_comm n); auto.
+Qed.  
+
+Lemma wf_ws_term : (forall m n t, wf_term m n t -> ws_term m n t).
+Proof. apply tpo_wf_ws. Qed.
+Lemma wf_ws_proc : (forall m n G D P, wf_proc m n G D P -> ws_proc m n P).
+Proof. apply tpo_wf_ws. Qed.
+Lemma wf_ws_oper : (forall m n G D o, wf_oper m n G D o -> ws_oper m n o).
+Proof. apply tpo_wf_ws. Qed.
+
+
 
 (* renaming ----------------------------------------------------------------- *)
 
 (* The operational semantics involve renaming resource identifiers.
 
-   Renamings, in general, are defined in [Contexts.v], but  for de Bruijn
-   indices, a renaming  amounts to function that takes a variable and
+   Renamings, in general, are defined in [Contexts.v], but for de Bruijn
+   indices, a renaming amounts to a function that takes a variable and
    returns a variable.
 
    The type [ren n n'] "renames" a variable in scope [n] to be a variable
@@ -885,28 +845,27 @@ Definition rename_var (x:var) (y:var) (z:var) :=
    of a term, so operations that rename them don't need to traverse
    nested subterms.
  *)
-
-Fixpoint rename_rvar_term {n n'} (v : ren n n') (t : term) :=
-  match t with
-  | bag m n'' P => bag m n'' (rename_rvar_proc (ren_shift n'' v) P)
-  end
-
-with rename_rvar_proc {n n'} (v : ren n n') P : proc :=
-  match P with
-  | def r o => def (v r) (rename_rvar_oper v o)
-  | app f r => app f (v r)
-  | par P1 P2 => par (rename_rvar_proc v P1) (rename_rvar_proc v P2)
-  end
     
-with rename_rvar_oper {n n'} (v : ren n n') (o:oper) :=
+Definition rename_rvar_oper {n n'} (v : ren n n') (o:oper) :=
   match o with
   | emp => emp
   | tup r1 r2 => tup (v r1) (v r2)
   | bng f => bng f
-  | lam t => lam (rename_rvar_term (ren_id 1) t)
+  | lam t => lam t
   end.
 
-(* terms don't have any free rvars to rename *)
+Fixpoint rename_rvar_proc {n n'} (v : ren n n') P : proc :=
+  match P with
+  | def r o => def (v r) (rename_rvar_oper v o)
+  | app f r => app f (v r)
+  | par P1 P2 => par (rename_rvar_proc v P1) (rename_rvar_proc v P2)
+  | nul => nul
+  end.
+
+Definition rename_rvar_term {n n'} (v : ren n n') (t : term) :=
+  match t with
+  | bag m n'' P => bag m n'' (rename_rvar_proc (ren_shift n'' v) P)
+  end.
 
 (* Unrestricted identifiers *are* lexically scoped in the sense
    that an identifier introduced in an outer scope might be mentioned
@@ -921,66 +880,41 @@ Fixpoint rename_fvar_term {m m'} (v : ren m m') (t : term) : term :=
   end
 
 with rename_fvar_proc {m m'} (v : ren m m') (P : proc) : proc :=
-       match P with
-       | def r o => def r (rename_fvar_oper v o)
-       | app f r => app (v f) r
-       | par P1 P2 => par (rename_fvar_proc v P1) (rename_fvar_proc v P2)
-       end
+  match P with
+  | def r o => def r (rename_fvar_oper v o)
+  | app f r => app (v f) r
+  | par P1 P2 => par (rename_fvar_proc v P1) (rename_fvar_proc v P2)
+  | nul => nul
+  end
 
 with rename_fvar_oper {m m'} (v : ren m m') (o : oper) : oper :=
-       match o with
-       | emp => emp
-       | tup r1 r2 => tup r1 r2
-       | bng f => bng (v f)
-       | lam t => lam (rename_fvar_term v t)
-       end.
+  match o with
+  | emp => emp
+  | tup r1 r2 => tup r1 r2
+  | bng f => bng (v f)
+  | lam t => lam (rename_fvar_term v t)
+  end.
 
+
+
+(* Renamings can be composed *)
 Lemma rename_rvar_compose_tpo : 
-  (forall (t:term),
-    forall n n' n'' (v1 : ren n n') (v2 : ren n' n''),
+  (forall (t : term) n n' n'' (v1 : ren n n') (v2 : ren n' n''),
       rename_rvar_term v2 (rename_rvar_term v1 t) = @rename_rvar_term n n'' (ren_compose v1 v2) t)
   /\
-  (forall (P : proc),
-     forall n n' n'' (v1 : ren n n') (v2 : ren n' n'') ,
+  (forall (P : proc) n n' n'' (v1 : ren n n') (v2 : ren n' n''),
        rename_rvar_proc v2 (rename_rvar_proc v1 P) = @rename_rvar_proc n n'' (ren_compose v1 v2) P)
   /\
-  (forall (o : oper),
-    forall n n' n'' (v1 : ren n n') (v2 : ren n' n''),
+  (forall (o : oper) n n' n'' (v1 : ren n n') (v2 : ren n' n''),
       rename_rvar_oper v2 (rename_rvar_oper v1 o) = @rename_rvar_oper n n'' (ren_compose v1 v2) o).
 Proof.
-  apply tpo_ind; intros; simpl; try reflexivity.
+  apply tpo_ind; intros; simpl. 
+  (* Aside from Bag, all cases are by IH(s) *)
+  all: try solve [try rewrite H; try rewrite H0; reflexivity].
+  (* Bag needs to shift the names *)
   - rewrite <- ren_compose_shift.
     rewrite <- H.
     reflexivity.
-  - rewrite H.
-    reflexivity.
-  - rewrite H.
-    rewrite H0.
-    reflexivity.
-  - rewrite H.
-    rewrite ren_compose_id_r.
-    reflexivity. apply wf_ren_id.
-Qed.
-
-Lemma rename_rvar_term_compose : forall n n' n'' (v1 : ren n n') (v2 : ren n' n'') (t : term),
-    rename_rvar_term v2 (rename_rvar_term v1 t) = @rename_rvar_term n n'' (ren_compose v1 v2) t.
-Proof.
-  intros.
-  apply rename_rvar_compose_tpo.
-Qed.
-  
-Lemma rename_rvar_proc_compose : forall n n' n'' (v1 : ren n n') (v2 : ren n' n'') (P : proc),
-    rename_rvar_proc v2 (rename_rvar_proc v1 P) = @rename_rvar_proc n n'' (ren_compose v1 v2) P.
-Proof.
-  intros.
-  apply rename_rvar_compose_tpo.
-Qed.
-
-Lemma rename_rvar_oper_compose : forall n n' n'' (v1 : ren n n') (v2 : ren n' n'') (o : oper),
-    rename_rvar_oper v2 (rename_rvar_oper v1 o) = @rename_rvar_oper n n'' (ren_compose v1 v2) o.
-Proof.
-  intros.
-  apply rename_rvar_compose_tpo.
 Qed.
 
 Lemma rename_fvar_compose_tpo :
@@ -988,46 +922,43 @@ Lemma rename_fvar_compose_tpo :
     forall m m' m'' (v1 : ren m m') (v2 : ren m' m''),
       rename_fvar_term v2 (rename_fvar_term v1 t) = @rename_fvar_term m m'' (ren_compose v1 v2) t)
   /\
-    (forall (P:proc),
-      forall m m' m'' (v1 : ren m m') (v2 : ren m' m''),
-        rename_fvar_proc v2 (rename_fvar_proc v1 P) = @rename_fvar_proc m m'' (ren_compose v1 v2) P)
-  /\ (forall (o:oper),
-      forall m m' m'' (v1 : ren m m') (v2 : ren m' m''),
-        rename_fvar_oper v2 (rename_fvar_oper v1 o) = @rename_fvar_oper m m'' (ren_compose v1 v2) o).
-Proof.
-  apply tpo_ind; intros; try reflexivity; simpl.
-  - rewrite H. rewrite ren_compose_shift. reflexivity.
-  - rewrite H. reflexivity.
-  - rewrite H.
-    rewrite H0.
-    reflexivity.
-  - rewrite H.
-    reflexivity.
-Qed.
-
-Lemma rename_fvar_compose_term :
-    forall (t:term),
+  (forall (P:proc),
     forall m m' m'' (v1 : ren m m') (v2 : ren m' m''),
-      rename_fvar_term v2 (rename_fvar_term v1 t) = @rename_fvar_term m m'' (ren_compose v1 v2) t.
+      rename_fvar_proc v2 (rename_fvar_proc v1 P) = @rename_fvar_proc m m'' (ren_compose v1 v2) P)
+  /\ 
+  (forall (o:oper),
+    forall m m' m'' (v1 : ren m m') (v2 : ren m' m''),
+      rename_fvar_oper v2 (rename_fvar_oper v1 o) = @rename_fvar_oper m m'' (ren_compose v1 v2) o).
 Proof.
-  apply rename_fvar_compose_tpo.
+  apply tpo_ind; intros; simpl. 
+  (* Aside from Bag, all cases are by IH(s) *)
+  all: try solve [try rewrite H; try rewrite H0; reflexivity].
+  (* Bag needs to shift the names *)
+  - rewrite <- ren_compose_shift.
+    rewrite <- H.
+    reflexivity.
 Qed.
 
-Lemma rename_fvar_compose_proc :
-  forall (P:proc),
-  forall m m' m'' (v1 : ren m m') (v2 : ren m' m''),
+Lemma rename_rvar_term_compose : forall n n' n'' (v1 : ren n n') (v2 : ren n' n'') (t : term),
+    rename_rvar_term v2 (rename_rvar_term v1 t) = @rename_rvar_term n n'' (ren_compose v1 v2) t.
+Proof. intros; apply rename_rvar_compose_tpo. Qed.
+Lemma rename_rvar_proc_compose : forall n n' n'' (v1 : ren n n') (v2 : ren n' n'') (P : proc),
+    rename_rvar_proc v2 (rename_rvar_proc v1 P) = @rename_rvar_proc n n'' (ren_compose v1 v2) P.
+Proof. intros; apply rename_rvar_compose_tpo. Qed.
+Lemma rename_rvar_oper_compose : forall n n' n'' (v1 : ren n n') (v2 : ren n' n'') (o : oper),
+    rename_rvar_oper v2 (rename_rvar_oper v1 o) = @rename_rvar_oper n n'' (ren_compose v1 v2) o.
+Proof. intros; apply rename_rvar_compose_tpo. Qed.
+
+Lemma rename_fvar_compose_term : forall m m' m'' (v1 : ren m m') (v2 : ren m' m'') (t : term),
+      rename_fvar_term v2 (rename_fvar_term v1 t) = @rename_fvar_term m m'' (ren_compose v1 v2) t.
+Proof. intros; apply rename_fvar_compose_tpo. Qed.
+Lemma rename_fvar_compose_proc : forall m m' m'' (v1 : ren m m') (v2 : ren m' m'') (P : proc),
     rename_fvar_proc v2 (rename_fvar_proc v1 P) = @rename_fvar_proc m m'' (ren_compose v1 v2) P.
-Proof.
-  apply rename_fvar_compose_tpo.
-Qed.
-  
-Lemma rename_fvar_compose_oper : 
-  forall (o:oper),
-  forall m m' m'' (v1 : ren m m') (v2 : ren m' m''),
+Proof. intros; apply rename_fvar_compose_tpo. Qed.
+Lemma rename_fvar_compose_oper : forall m m' m'' (v1 : ren m m') (v2 : ren m' m'') (o : oper),
     rename_fvar_oper v2 (rename_fvar_oper v1 o) = @rename_fvar_oper m m'' (ren_compose v1 v2) o.
-Proof.
-  apply rename_fvar_compose_tpo.
-Qed.
+Proof. intros; apply rename_fvar_compose_tpo. Qed.
+
   
 
 (* Renamings of linear and unrestricted variables commute with each other. *) 
@@ -1037,165 +968,88 @@ Lemma rename_rvar_fvar_commute_tpo :
     forall m m' n n' (fv : ren m m') (rv : ren n n'),
       rename_rvar_term rv (rename_fvar_term fv t) = rename_fvar_term fv (rename_rvar_term rv t))
   /\
-    (forall (P:proc),
-      forall m m' n n' (fv : ren m m') (rv : ren n n'),
-        rename_rvar_proc rv (rename_fvar_proc fv P) = rename_fvar_proc fv (rename_rvar_proc rv P))
-  /\ (forall (o:oper),
-      forall m m' n n' (fv : ren m m') (rv : ren n n'),
-        rename_rvar_oper rv (rename_fvar_oper fv o) = rename_fvar_oper fv (rename_rvar_oper rv o)).
-Proof.
-  apply tpo_ind; intros; try reflexivity; simpl.
-  - rewrite H.
-    reflexivity.
-  - rewrite H.
-    reflexivity.
-  - rewrite H.
-    rewrite H0.
-    reflexivity.
-  - rewrite H.
-    reflexivity.
-Qed.
-
-Lemma rename_rvar_fvar_commute_term :
-  forall (t:term),
+  (forall (P:proc),
     forall m m' n n' (fv : ren m m') (rv : ren n n'),
-      rename_rvar_term rv (rename_fvar_term fv t) = rename_fvar_term fv (rename_rvar_term rv t).
+      rename_rvar_proc rv (rename_fvar_proc fv P) = rename_fvar_proc fv (rename_rvar_proc rv P))
+  /\ 
+  (forall (o:oper),
+    forall m m' n n' (fv : ren m m') (rv : ren n n'),
+      rename_rvar_oper rv (rename_fvar_oper fv o) = rename_fvar_oper fv (rename_rvar_oper rv o)).
 Proof.
-  apply rename_rvar_fvar_commute_tpo.
+  apply tpo_ind; intros; simpl.
+  (* By IHs *)
+  all: try rewrite H; try rewrite H0; reflexivity.
 Qed.
 
-Lemma rename_rvar_fvar_commute_proc :
-  forall (P:proc),
-      forall m m' n n' (fv : ren m m') (rv : ren n n'),
-        rename_rvar_proc rv (rename_fvar_proc fv P) = rename_fvar_proc fv (rename_rvar_proc rv P).
-Proof.
-  apply rename_rvar_fvar_commute_tpo.
-Qed.
-
-Lemma rename_rvar_fvar_commute_oper :
-  forall (o:oper),
-      forall m m' n n' (fv : ren m m') (rv : ren n n'),
-        rename_rvar_oper rv (rename_fvar_oper fv o) = rename_fvar_oper fv (rename_rvar_oper rv o).
-Proof.
-  apply rename_rvar_fvar_commute_tpo.
-Qed.
+Lemma rename_rvar_fvar_commute_term : forall m m' n n' (fv : ren m m') (rv : ren n n') (t:term),
+    rename_rvar_term rv (rename_fvar_term fv t) = rename_fvar_term fv (rename_rvar_term rv t).
+Proof. intros; apply rename_rvar_fvar_commute_tpo. Qed.
+Lemma rename_rvar_fvar_commute_proc : forall m m' n n' (fv : ren m m') (rv : ren n n') (P:proc),
+    rename_rvar_proc rv (rename_fvar_proc fv P) = rename_fvar_proc fv (rename_rvar_proc rv P).
+Proof. intros; apply rename_rvar_fvar_commute_tpo. Qed.
+Lemma rename_rvar_fvar_commute_oper : forall m m' n n' (fv : ren m m') (rv : ren n n') (o:oper),
+    rename_rvar_oper rv (rename_fvar_oper fv o) = rename_fvar_oper fv (rename_rvar_oper rv o).
+Proof. intros; apply rename_rvar_fvar_commute_tpo. Qed.
 
   
-(* Renaming by the identity does nothing. *)
 
-Lemma map_ren_id :
-  forall (rs : list rvar)
-    (n : nat)
-    (HRS : Forall (fun x : nat => x < n) rs),
-    map (ren_id n) rs = rs.
-Proof.
-  induction rs; intros; simpl; auto.
-  inversion HRS. subst.
-  rewrite IHrs; auto.
-  unfold ren_id.
-  destruct (lt_dec a n); auto.
-  lia.
-Qed.  
 
+  (* ren_id is a renaming identity *)
 
 Lemma rename_rvar_id_tpo :
-  (forall m n (t:term)
-      (WS:ws_term m n t),
-      rename_rvar_term (ren_id n) t = t)
+  (forall m n (t:term),
+      ws_term m n t -> rename_rvar_term (ren_id n) t = t)
   /\
-    (forall m n (P:proc)
-       (WS:ws_proc m n P), rename_rvar_proc (ren_id n) P = P)
+  (forall m n (P:proc),
+      ws_proc m n P -> rename_rvar_proc (ren_id n) P = P)
   /\
-    (forall m n (o:oper)
-        (WS:ws_oper m n o), rename_rvar_oper (ren_id n) o = o).
+  (forall m n (o:oper),
+      ws_oper m n o -> rename_rvar_oper (ren_id n) o = o).
 Proof.
-  apply ws_tpo_ind; intros; simpl; try rewrite ren_shift_id; try reflexivity.
-  - rewrite H.
-    reflexivity.
-  - rewrite H.
-    rewrite ren_id_id; auto.
-  - rewrite ren_id_id; auto.
-  - rewrite H.
-    rewrite H0.
-    reflexivity.
-  - rewrite ren_id_id; auto.
-    rewrite ren_id_id; auto.
-  - rewrite H.
-    reflexivity.
+  apply ws_tpo_ind; intros; simpl.
+  (* By IHs and Properties of Identity Renamings *)
+  all: try rewrite ren_shift_id; try rewrite H; try rewrite H0;
+        repeat rewrite ren_id_id; auto.
 Qed.
-
-
-Lemma rename_rvar_id_term :
-  (forall (t:term),
-    forall m n, ws_term m n t -> rename_rvar_term (ren_id n) t = t).
-Proof.
-  intros.
-  eapply rename_rvar_id_tpo; eauto.
-Qed.
-
-Lemma rename_rvar_id_oper : 
-  forall (o:oper), forall m n, ws_oper m n o -> rename_rvar_oper (ren_id n) o = o.
-Proof.
-  intros.
-  eapply rename_rvar_id_tpo; eauto.
-Qed.  
-  
-Lemma rename_rvar_id_proc :
-  forall (P:proc), forall m n, ws_proc m n P -> rename_rvar_proc (ren_id n) P = P.
-Proof.
-  intros.
-  eapply rename_rvar_id_tpo; eauto.
-Qed.  
   
 Lemma rename_fvar_id_tpo :
-  (forall (t:term),
-    forall m n, ws_term m n t -> rename_fvar_term (ren_id m) t = t)
+  (forall m n (t:term), 
+      ws_term m n t -> rename_fvar_term (ren_id m) t = t)
   /\
-    (forall (P:proc),
-      forall m n, ws_proc m n P -> rename_fvar_proc (ren_id m) P = P)
-  /\ (forall (o:oper),
-      forall m n, ws_oper m n o -> rename_fvar_oper (ren_id m) o = o).
+  (forall m n (P:proc), 
+      ws_proc m n P -> rename_fvar_proc (ren_id m) P = P)
+  /\ 
+  (forall m n (o:oper), 
+      ws_oper m n o -> rename_fvar_oper (ren_id m) o = o).
 Proof.
-  apply tpo_ind; intros; try reflexivity; simpl.
-  - rewrite ren_shift_id.
-    inversion H0; subst.
-    erewrite H; eauto.
-  - inversion H0; subst.
-    erewrite H; eauto.
-  - inversion H; subst.
-    rewrite ren_id_id; auto.
-  - inversion H1; subst.
-    erewrite H; eauto.
-    erewrite H0; eauto.
-  - inversion H; subst.
-    rewrite ren_id_id; auto.
-  - inversion H0; subst.
-    erewrite H; eauto.
+  apply ws_tpo_ind; intros; simpl.
+  (* By IHs and Properties of Identity Renamings *)
+  all: try rewrite ren_shift_id; try rewrite H; try rewrite H0;
+        repeat rewrite ren_id_id; auto.
 Qed.
-  
+
+Lemma rename_rvar_id_term :
+    forall m n (t:term), ws_term m n t -> rename_rvar_term (ren_id n) t = t.
+Proof. intros; eapply rename_rvar_id_tpo; eauto. Qed.
+Lemma rename_rvar_id_oper : 
+  forall m n (o:oper), ws_oper m n o -> rename_rvar_oper (ren_id n) o = o.
+Proof. intros; eapply rename_rvar_id_tpo; eauto. Qed.
+Lemma rename_rvar_id_proc :
+  forall m n (P:proc), ws_proc m n P -> rename_rvar_proc (ren_id n) P = P.
+Proof. intros; eapply rename_rvar_id_tpo; eauto. Qed.
 Lemma rename_fvar_id_term :
- forall (t:term),
- forall m n, ws_term m n t -> rename_fvar_term (ren_id m) t = t.
-Proof.
-  apply rename_fvar_id_tpo.
-Qed.
-
+ forall m n (t:term), ws_term m n t -> rename_fvar_term (ren_id m) t = t.
+Proof. intros; eapply rename_fvar_id_tpo; eauto. Qed.
 Lemma rename_fvar_id_proc :
- forall (P:proc),
- forall m n, ws_proc m n P -> rename_fvar_proc (ren_id m) P = P.
-Proof.
-  apply rename_fvar_id_tpo.
-Qed.
-
+ forall m n (P:proc), ws_proc m n P -> rename_fvar_proc (ren_id m) P = P.
+Proof. intros; eapply rename_fvar_id_tpo; eauto. Qed.
 Lemma rename_fvar_id_oper :
- forall (o:oper),
- forall m n, ws_oper m n o -> rename_fvar_oper (ren_id m) o = o.
-Proof.
-  apply rename_fvar_id_tpo.
-Qed.
+ forall m n (o:oper), ws_oper m n o -> rename_fvar_oper (ren_id m) o = o.
+Proof. intros; eapply rename_fvar_id_tpo; eauto. Qed.
 
 
-(* alpha-equivalence 
+
+(* TODO? alpha-equivalence 
 
 t1 seq t1' peq t2 => t1 aeq t2 
 
@@ -1206,15 +1060,21 @@ exists t1' t2' st t1' aeq t2' and t1 steps t1' and t2 steps t2'
 *)
 
 
+
 (* nu equivalence -------------------------------------------------------- *)
 (* The "nu-bound" variables within a bag can be permuted without affecting the
 meaning of the term.
 
-   That means that [bag m n t] is "permutation equivalent" to [be m n t'] when
-   we rename the  [m] free function identifiers and [n] free resource identifiers
-   up to some bijection.
+   That means that [bag m n t] is "permutation equivalent" to [bag m n t'] when
+   we rename (in t and t') the [m] free function identifiers 
+   and [n] bound free identifiers up to some bijection.
 
 *)   
+
+(* FRAN What is allowed to be renamed? 
+    The description only mentions free,
+    I think it should only be bound,
+    but the definition allows both? *)
 
 Unset Elimination Schemes.
 Inductive peq_term :
@@ -1252,6 +1112,8 @@ with peq_proc : forall (m n : nat) (bf : ren m m) (br : ren n n), proc -> proc -
     peq_proc m n bf br P1 P1' ->
     peq_proc m n bf br P2 P2' ->
     peq_proc m n bf br (par P1 P2) (par P1' P2')
+
+(* FRAN Need to add null process case *)
              
 with peq_oper : forall (m n : nat) (bf : ren m m) (br : ren n n), oper -> oper -> Prop :=
 | peq_emp :
@@ -1289,7 +1151,7 @@ Scheme peq_term_ind := Induction for peq_term Sort Prop
                          with peq_oper_ind := Induction for peq_oper Sort Prop.
 
 Combined Scheme peq_tpo_ind from peq_term_ind, peq_proc_ind, peq_oper_ind.
-
+(*
 Lemma peq_compose_tpo :
   (forall (m n:nat) (bf : ren m m) (br : ren n n) (t t' : term)
      (HT: peq_term m n bf br t t'),
@@ -1850,10 +1712,16 @@ Proof.
     simpl in H.
     setoid_rewrite (ren_delta_compose _ (ren_id 1) 0 1 (wf_ren_id 1) (bij_ren_id 1)) in H; auto.
 Qed.    
+*)
 
-(* cuts *)
 
-(* "removes" variable x from the scope, where n is the number of variables > x *)
+
+
+
+(* Cuts *)
+
+(* "removes" variable x from the scope, 
+    where n is the number of variables > x *)
 Definition strengthen n (x:var) : ren (x + 1 + n) (x + n) :=
   fun y =>
   if lt_dec y x then y
@@ -1862,13 +1730,13 @@ Definition strengthen n (x:var) : ren (x + 1 + n) (x + n) :=
 (* "retracts" a variable y into x:
    Makes sense when x < y
     - "merges" x and y to be just "x"
-
     - first rename y to x
         y + 1 + n  ~> y + 1 + n
     - then cut out y
         y + 1 + n ~>  y + n
    Here, n is the number of variables in the original scope that are > y.
  *)
+
 Definition retract n x y : ren (y + 1 + n) (y + n) :=
   @ren_compose (y + 1 + n) (y + 1 + n) _ (rename_var y x) (strengthen n y).
 
@@ -1893,9 +1761,6 @@ Proof.
   - simpl.
 *)
 
-
-
-
 (* Fixpoint cuts n (l:list (nat * nat)) : ren (length l + n) n := *)
 (*   match l with *)
 (*   | [] => ren_id n *)
@@ -1910,7 +1775,231 @@ Proof.
 (*       end *)
 (*   end. *)
 
+
+
+(* Extending Contexts ---------------------------------------------------------- *)
+
+Ltac lia_destruct :=
+  repeat match goal with
+    | [ H: context[lt_dec ?R1 ?R2] |- _ ] => destruct (lt_dec R1 R2); try lia
+    end;
+  repeat match goal with
+    | [ H: context[Nat.eq_dec ?R1 ?R2] |- _ ] => destruct (Nat.eq_dec R1 R2); subst; try lia
+    end.
+
+Ltac lia_goal :=
+  repeat match goal with
+    | [ |- context[lt_dec ?R1 ?R2] ] => destruct (lt_dec R1 R2); try lia
+    | [ |- context[Nat.eq_dec ?R1 ?R2] ] => destruct (Nat.eq_dec R1 R2); try lia
+    end.
+
+
+
+(* A renaming that changes the last m variables to (m + m'') *)
+Definition weaken_ren (m m' m'' : nat) : ren (m' + m) (m' + m'' + m) :=
+  fun f =>
+    if lt_dec f m' then f else
+      f + m''.
+
+Lemma ren_shift_weaken_commute : 
+forall (m' m0 m1 m2 : nat),
+  ren_shift m' (weaken_ren m0 m1 m2) =
+  weaken_ren m0 (m' + m1) m2.
+Proof.
+  intros.
+  apply functional_extensionality.
+  intros x.
+  unfold ren_shift, weaken_ren, ctxt_app, ren_id.
+  lia_goal.
+Qed.  
+
+
+(* A renaming that commutes two adjacent variable spaces 
+    (m1 and m2 in length) starting after m0 variables *)
+Definition ren_commute_str m0 m1 m2 m3:  ren (m0 + (m1 + m2) + m3) (m0 + (m2 + m1) + m3) :=
+  fun x =>
+    if (lt_dec x m0) then x 
+    else if (lt_dec x (m0 + m1)) then (x + m2)
+         else if (lt_dec x (m0 + m1 + m2)) then (x - m1)
+                  else x.
+
+
+
+(* Definitions and Lemmas specific to Linear Opal
+    but still related to context usage *)
+
+(* Takes a process that typechecks in G' ⊗ G
+    and moves it to G' ⊗ zero m'' ⊗ G *)
+Definition weaken_f m m' m'' (P : proc) : proc :=
+  rename_fvar_proc (weaken_ren m m' m'') P.
+
+
+
+(* Evaluation Contexts --------------------------------------------------- *)
+
+Inductive EC_term :=
+| Ebag (m n:nat) (EP:EC_proc)   (* nu. {f1...fm} {r1..rn} EP *)
+
+with EC_proc :=
+| Ehol
+| Edeflam (r:rvar) (Et : EC_term)  (* r <- lam r'. Et *)
+| Epar (EP : EC_proc) (P : proc). (* EP | P *)
+(* May need left and right Epars *)
+
+Reserved Notation "Et <=[ P ]" (at level 55).
+Reserved Notation "EP <=[ P ]p" (at level 55).
+
+(* Fill an evaluation context with a process *)
+Fixpoint fill_EC_term (Et : EC_term) (P : proc) : term :=
+  match Et with
+  | Ebag m n EP => bag m n (EP <=[ P ]p)
+  end
+
+with fill_EC_proc (EP : EC_proc) (P : proc) : proc :=
+  match EP with
+  | Ehol => P
+  | Edeflam r Et => def r (lam (Et <=[ P ]))
+  | Epar EP P' => par (EP <=[ P ]p) P' 
+  end
+  
+  where "Et <=[ P ]" := (fill_EC_term Et P)
+  and   "EP <=[ P ]p" := (fill_EC_proc EP P).
+
+
+
+Fixpoint rename_rvar_EC_proc {n n'} (v : ren n n') (EP : EC_proc) :=
+  match EP with
+  | Ehol => Ehol
+  | Edeflam r Et => Edeflam (v r) Et
+  | Epar EP P => Epar (rename_rvar_EC_proc v EP) (rename_rvar_proc v P)
+  end.
+
+Definition rename_rvar_EC_term {n n'} (v : ren n n') (Et : EC_term) :=
+  match Et with
+  | Ebag m n'' EP => Ebag m n'' (rename_rvar_EC_proc (ren_shift n'' v) EP)
+  end.
+
+
+
 (* Operational Semantics --------------------------------------------------- *)
+                  
+
+
+
+Definition freshen_body m m' m'' (n:nat) n' n'' (r':nat) (Q:proc) :=
+  let Q0 := rename_fvar_proc (ren_commute_str 0 m'' m' m) Q in
+  let Q1 := rename_rvar_proc (weaken_ren (n'' + 1) 0 n') Q0 in
+  let Q2 := @rename_rvar_proc (n' + (n'' + 1) + n) (n' + (n'' + 1) + n) 
+                (rename_var (n' + n'') r') Q1 in
+  Q2.
+
+  
+
+(* Gives a "collapsed" renaming that only renames r1 to r2 *)
+Definition rename_if_neq n (r1 r2 : nat) : ren n n :=
+  if Nat.eq_dec r1 r2 then
+    ren_id n
+  else
+    rename_var r1 r2.
+
+(* Gives a "collapsed" renaming that only renames r1 to r1' and r2 to r2'. 
+    Used for stepping the cut (r <- (r1, r2) | r <- (r1', r2')) *)
+Definition cut_renaming n (r1 r2 r1' r2':nat) : ren n n :=
+  (* First, check if two variables in either pair are equal *)
+  if Nat.eq_dec r1 r2 then
+    rename_if_neq n r1' r2'
+  else if Nat.eq_dec r1' r2' then
+    rename_var r1 r2
+  (* Second, check if a variable is equal to its
+      non-corresponding variable in the other pair *)
+  else if Nat.eq_dec r1 r2' then
+    rename_if_neq n r1' r2
+  else if Nat.eq_dec r1' r2 then
+    rename_var r1 r2'
+  (* Third, check if a variable is equal to its
+      corresponding variable in the other pair *)
+  else if Nat.eq_dec r1 r1' then
+    rename_if_neq n r2 r2'
+  else if Nat.eq_dec r2 r2' then
+    rename_var r1 r1'
+  (* Now we know there are no equalities between the variables *)
+  else
+    @ren_compose n n nat (rename_var r1 r1') (rename_var r2 r2').
+
+
+
+              
+(* Inductive prim_step : term -> term -> Prop :=
+| step_par_nul :    (* Et <=[ P | nul ] --> Et <=[ P ] *)
+  forall Et P,
+    prim_step
+      (Et <=[ par P nul ])
+      (Et <=[ P ])
+
+| step_emp_cut :    (* Et <=[ r <- () | r <- () ] --> Et <=[ nul ] *)
+  forall Et r,
+    prim_step
+      (Et <=[ par (def r emp) (def r emp) ])
+      (Et <=[ nul ])
+
+      (* FRAN Need to create function for finding context of hole,
+        and use that to find the variable depth for the cut *)
+| step_tup_cut :    (* Et <=[ r <- (r1, r2) | r <- (r1', r2') ] --> rename(ET) <=[ nul ] *)
+  forall Et r r1 r2 r1' r2' n,
+    prim_step
+      (Et <=[ par (def r (tup r1 r2)) (def r (tup r1' r2')) ])
+      ((rename_rvar_EC_term (cut_renaming (n' + n) r1 r2 r1' r2') Et) <=[ nul ])
+      
+| step_app :
+  forall Et Et' m m' m'' n n' n'' r r' f P Q,
+    (* (1) scope_extrude -> ren_commute_str
+       (2) weaken_f after step ? *)
+    let Q' := (freshen_body m m' m'' n n' n'' r' Q) in
+    prim_step
+    (Et <=[ (par (par
+                (def r (lam (bag m'' n'' Q)))
+                (def r (bng f)))
+                Et' <=[ app f r' ]) ]) 
+    (bag m' n'
+       (par
+          (par
+                (def r (lam (bag m'' n'' Q)))
+                (def r (bng f)))
+          (app f r'))) 
+    (bag (m' + m'') (n' + (n'' + 1))
+       (par
+          (weaken_f m m' m''
+          (par P
+             (par
+                (def r (lam (bag m'' n'' Q)))
+                (def r (bng f)))))
+              Q')). *)
+
+
+(* Lemma wf_prim_step :
+  forall m n (G: lctxt m) t t',
+    wf_term m n G (zero n) t ->
+    prim_step t t' ->
+    wf_term m n G (zero n) t'.
+Proof.
+  intros.
+  inversion H0; subst; clear H0.
+  - eapply wf_prim_step_emp; eauto.
+  - eapply wf_prim_step_tup; eauto.
+  - eapply wf_prim_step_app; eauto.
+Qed.    
+
+
+Inductive  step : nat -> nat -> term -> term -> Prop :=
+| step_equiv : forall m n t1 t1' t2,
+    t1 ≈t t1' ->
+    prim_step m n t1' t2 ->
+    step m n t1 t2.
+
+ *)
+
+
+
 
 Import ListNotations.
 Example ex_P0 : proc :=
@@ -1924,13 +2013,33 @@ Example ex_P : proc :=
 
 Eval compute in retract_rvar_proc 1 1 3 ex_P0.
 
+Lemma wf_prim_step_nul :
+  forall m m' n n' P,
+    wf_term m n (bag m' n' (par P nul)) ->
+    wf_term m n (bag m' n' P).
+Proof.
+  intros.
+  inversion H; clear H.
+  inversion WFP; existT_eq; subst; clear WFP.
+  inversion WFP2; existT_eq; subst; clear WFP2.
+  
+  rewrite HG0 in HG; clear HG0.
+  rewrite HD0 in HD; clear HD0.
+  rewrite sum_zero_r in HG.
+  rewrite sum_zero_r in HD.
+  rewrite <- HG in WFP1; clear HG.
+  rewrite <- HD in WFP1; clear HD.
+
+  eapply wf_bag; auto.
+Qed.
+
 Lemma wf_prim_step_emp :
   forall m m' n n' r P (G : lctxt m),
     wf_term m n G (zero n) (bag m' n' (par P (par (def r emp) (def r emp)))) ->
     wf_term m n G (zero n) (bag m' n' P).
 Proof.
   intros.
-  inversion H; existT_eq; subst; clear H.
+  inversion H; subst. existT_eq; subst; clear H.
   inversion WFP; existT_eq; subst; clear WFP.
   inversion WFP2; existT_eq; subst; clear WFP2.
   inversion WFP0; existT_eq; subst; clear WFP0.
@@ -2031,20 +2140,6 @@ Lemma zero_delta_0 :
   destruct (lt_dec x n); try lia.
   destruct (Nat.eq_dec x x0); try lia.
 Qed.  
-
-Ltac lia_destruct :=
-  repeat match goal with
-    | [ H: context[lt_dec ?R1 ?R2] |- _ ] => destruct (lt_dec R1 R2); try lia
-    end;
-  repeat match goal with
-    | [ H: context[Nat.eq_dec ?R1 ?R2] |- _ ] => destruct (Nat.eq_dec R1 R2); subst; try lia
-    end.
-
-Ltac lia_goal :=
-  repeat match goal with
-    | [ |- context[lt_dec ?R1 ?R2] ] => destruct (lt_dec R1 R2); try lia
-    | [ |- context[Nat.eq_dec ?R1 ?R2] ] => destruct (Nat.eq_dec R1 R2); try lia
-    end.
 
 
 Lemma wf_oper_rename_rvar :
@@ -3025,34 +3120,6 @@ forall m n (G : lctxt m) (D : lctxt n) (P : proc),
 Proof.
   apply wf_rename_fvar_ren_commute_wpo.
 Qed.
-
-(*
-weaken_f : 
-
-Takes a term that typechecks in:
-G' ⊗ G
-and moves it to:
-G' ⊗ zero m'' ⊗ G
-*)
-Definition weaken_ren (m m' m'' : nat) : ren (m' + m) (m' + m'' + m) :=
-  fun f =>
-    if lt_dec f m' then f else
-      f + m''.
-
-Definition weaken_f m m' m'' (P : proc) : proc :=
-  rename_fvar_proc (weaken_ren m m' m'') P.
-
-Lemma ren_shift_weaken_commute : 
-forall (m' m0 m1 m2 : nat),
-  ren_shift m' (weaken_ren m0 m1 m2) =
-  weaken_ren m0 (m' + m1) m2.
-Proof.
-  intros.
-  apply functional_extensionality.
-  intros x.
-  unfold ren_shift, weaken_ren, ctxt_app, ren_id.
-  lia_goal.
-Qed.  
 
 Lemma wf_weaken_f_wpo :
   (forall m0 n (G0 : lctxt m0) (D : lctxt n) (t : term),
@@ -4551,16 +4618,16 @@ Admitted.
                    
 
 
-Inductive prim_step : nat -> nat -> term -> term -> Prop :=
+Inductive prim_step : term -> term -> Prop :=
 | step_emp_cut :
-  forall m m' n n' r P,
-    prim_step m n
-      (bag m' n' (par P (par (def r emp) (def r emp))))
-      (bag m' n' P)
+  forall m n r P,
+    prim_step
+      (bag m n (par P (par (def r emp) (def r emp))))
+      (bag m n P)
 
 | step_tup_cut :
-  forall m m' n n' r r1 r2 r1' r2' P,
-    prim_step m n
+  forall m' n n' r r1 r2 r1' r2' P,
+    prim_step
       (bag m' n' (par P (par (def r (tup r1 r2)) (def r (tup r1' r2')))))
       (bag m' n' (rename_rvar_proc (cut_renaming (n' + n) r1 r2 r1' r2') P))
       
@@ -4580,7 +4647,7 @@ Inductive prim_step : nat -> nat -> term -> term -> Prop :=
          (par (def r (lam (bag m'' n'' Q)))
          (par (def r (bng f))
               Q')))). *)
-    prim_step m n 
+    prim_step
     (bag m' n'
        (par
           (par P
@@ -4601,7 +4668,7 @@ Inductive prim_step : nat -> nat -> term -> term -> Prop :=
 Lemma wf_prim_step :
   forall m n (G: lctxt m) t t',
     wf_term m n G (zero n) t ->
-    prim_step m n t t' ->
+    prim_step t t' ->
     wf_term m n G (zero n) t'.
 Proof.
   intros.
