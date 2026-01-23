@@ -758,19 +758,23 @@ Qed.
         reflexivity.
   Qed.
 
+
+  (* FRAN: Added this just to bundle, 
+      I have not propogated this through this file.*)
+  Definition wf_bij_ren {n} (r : ren n n) :=
+    {HWFBJ: wf_ren r & bij_ren r}.
+
   Lemma bij_ren_app :
     forall {n m} (r1 : ren n n) (r2 : ren m m)
-      (HWF1 : wf_ren r1)
-      (HWF2 : wf_ren r2)
-      (HBR1 : bij_ren r1)
-      (HBR2 : bij_ren r2),
+      (HWB1 : wf_bij_ren r1)
+      (HWB2 : wf_bij_ren r2),
       @bij_ren (n + m) (bij_app r1 r2).
   Proof.
     unfold bij_app, ctxt_app.
     intros.
     unfold bij_ren.
-    destruct HBR1 as [r1_inv [HR1 HI1]].
-    destruct HBR2 as [r2_inv [HR2 HI2]].
+    destruct HWB1 as [HWF1 [r1_inv [HR1 HI1]]].
+    destruct HWB2 as [HWF2 [r2_inv [HR2 HI2]]].
     exists (bij_app r1_inv r2_inv).
     split.
     - apply wf_bij_app; auto.

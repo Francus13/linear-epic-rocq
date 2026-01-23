@@ -1065,16 +1065,38 @@ exists t1' t2' st t1' aeq t2' and t1 steps t1' and t2 steps t2'
 (* The "nu-bound" variables within a bag can be permuted without affecting the
 meaning of the term.
 
-   That means that [bag m n t] is "permutation equivalent" to [bag m n t'] when
-   we rename (in t and t') the [m] free function identifiers 
-   and [n] bound free identifiers up to some bijection.
+   That means that [bag m' n' P] is "permutation equivalent" to [bag m' n' P'] when
+   we rename (in P and P') the [m'] bound function identifiers 
+   and [n'] bound identifiers up to some bijection.
 
-*)   
+   Permutation equivalence is also parameterized by two renamings that are used
+   when passing outer permutations (of m and n variables) inwards. As such, two terms are truly
+   permutation equivalent when these renaming parameters are identities (or m and n are 0).
 
-(* FRAN What is allowed to be renamed? 
-    The description only mentions free,
-    I think it should only be bound,
-    but the definition allows both? *)
+*)
+
+(* FRAN: Temporary, should be in Contexts.v.*)
+Definition wf_bij_ren {n} (r : ren n n) :=
+  {HWFBJ: wf_ren r & bij_ren r}.
+
+Lemma wf_bij_ren_compose :
+  forall n (r1 : ren n n) (r2 : ren n n)
+    (WB1 : wf_bij_ren r1) (WB2 : wf_bij_ren r2),
+    wf_bij_ren (ren_compose r1 r2).
+Proof.
+  unfold wf_bij_ren; intros.
+  destruct WB1; destruct WB2; split;
+  auto using wf_ren_compose, bij_ren_compose.
+Qed.
+
+Ltac dest_wf_bij_ren :=
+  repeat match goal with
+    | [ H: context[wf_bij_ren ?R] |- _ ] => destruct H
+    end.
+  
+
+
+
 
 Unset Elimination Schemes.
 Inductive peq_term :
@@ -1084,12 +1106,10 @@ Inductive peq_term :
     (bf : ren m m)
     (br : ren n n)
     (bf' : ren m' m')
-    (WFF' : wf_ren bf')
-    (HBF' : bij_ren bf')
     (br' : ren n' n')
-    (WFR' : wf_ren br')
-    (HBR' : bij_ren br')
-    (P  P': proc)
+    (WBF' : wf_bij_ren bf')
+    (WBR' : wf_bij_ren br')
+    (P P' : proc)
     (EQP : peq_proc (m' + m) (n' + n) (bij_app bf' bf) (bij_app br' br) P P')
   ,
     peq_term m n bf br (bag m' n' P) (bag m' n' P')
@@ -1113,35 +1133,33 @@ with peq_proc : forall (m n : nat) (bf : ren m m) (br : ren n n), proc -> proc -
     peq_proc m n bf br P2 P2' ->
     peq_proc m n bf br (par P1 P2) (par P1' P2')
 
-(* FRAN Need to add null process case *)
+| peq_nul : forall m n
+    (bf : ren m m)
+    (br : ren n n),
+    peq_proc m n bf br nul nul
              
 with peq_oper : forall (m n : nat) (bf : ren m m) (br : ren n n), oper -> oper -> Prop :=
-| peq_emp :
-  forall m n
+| peq_emp : forall m n
     (bf : ren m m)
     (br : ren n n),
     peq_oper m n bf br emp emp
 
-| peq_tup :
-  forall m n
-    r1 (HR1 : r1 < n)
-    r2 (HR2 : r2 < n)
+| peq_tup : forall m n r1 (HR1 : r1 < n) r2 (HR2 : r2 < n)
     (bf : ren m m)
     (br : ren n n),
     peq_oper m n bf br (tup r1 r2) (tup (br r1) (br r2))
 
-| peq_bng :
-  forall m n f (HF : f < m)
+| peq_bng : forall m n f (HF : f < m)
     (bf : ren m m)
     (br : ren n n),
     peq_oper m n bf br (bng f) (bng (bf f))
 
-| peq_lam :
-  forall m n t t'
+| peq_lam : forall m n t t'
     (bf : ren m m)
     (br : ren n n),
     peq_term m 1 bf (ren_id 1) t t' ->
     peq_oper m n bf br (lam t) (lam t').
+(* FRAN: We may need to allow the parameter variable to permute? *)
 Set Elimination Schemes.
 
 Hint Constructors peq_term peq_proc peq_oper : core.
@@ -1151,86 +1169,69 @@ Scheme peq_term_ind := Induction for peq_term Sort Prop
                          with peq_oper_ind := Induction for peq_oper Sort Prop.
 
 Combined Scheme peq_tpo_ind from peq_term_ind, peq_proc_ind, peq_oper_ind.
-(*
+
 Lemma peq_compose_tpo :
   (forall (m n:nat) (bf : ren m m) (br : ren n n) (t t' : term)
      (HT: peq_term m n bf br t t'),
-    forall (WFF : wf_ren bf) (WFR : wf_ren br)
-      (BF : bij_ren bf) (BR : bij_ren br)
+    forall (WBF : wf_bij_ren bf) (WBR : wf_bij_ren br)
       (bf' : ren m m) (br' : ren n n) (t'' : term)
-      (WFF' : wf_ren bf') (WFR' : wf_ren br')
-      (BF' : bij_ren bf') (BR' : bij_ren br')      
+      (WBF' : wf_bij_ren bf') (WBF' : wf_bij_ren br')    
       (HT' : peq_term m n bf' br' t' t''),
       peq_term m n (ren_compose bf bf') (ren_compose br br') t t'')
   /\
   (forall (m n:nat) (bf : ren m m) (br : ren n n) (P P' : proc)
      (HT: peq_proc m n bf br P P'),
-    forall (WFF : wf_ren bf) (WFR : wf_ren br)
-      (BF : bij_ren bf) (BR : bij_ren br)      
+    forall (WBF : wf_bij_ren bf) (WBR : wf_bij_ren br)   
       (bf' : ren m m) (br' : ren n n) (P'' : proc)
-      (WFF' : wf_ren bf') (WFR' : wf_ren br')
-      (BF' : bij_ren bf') (BR' : bij_ren br')            
+      (WBF' : wf_bij_ren bf') (WBF' : wf_bij_ren br')             
       (HT' : peq_proc m n bf' br' P' P''),
       peq_proc m n (ren_compose bf bf') (ren_compose br br') P P'')
   /\
   (forall (m n:nat) (bf : ren m m) (br : ren n n) (o o' : oper)
      (HT: peq_oper m n bf br o o'),
-    forall (WFF : wf_ren bf) (WFR : wf_ren br)
-      (BF : bij_ren bf) (BR : bij_ren br)      
+    forall (WBF : wf_bij_ren bf) (WBR : wf_bij_ren br)   
       (bf' : ren m m) (br' : ren n n) (o'' : oper)
-      (WFF' : wf_ren bf') (WFR' : wf_ren br')
-      (BF' : bij_ren bf') (BR' : bij_ren br')            
+      (WBF' : wf_bij_ren bf') (WBF' : wf_bij_ren br')            
       (HT' : peq_oper m n bf' br' o' o''),
       peq_oper m n (ren_compose bf bf') (ren_compose br br') o o'').
 Proof.
-  apply peq_tpo_ind; intros.
-  - inversion HT'.
-    existT_eq. subst.
-    econstructor.
-    + eapply wf_ren_compose. apply WFF'. apply WFF'1.
-    + apply bij_ren_compose; auto.
-    + eapply wf_ren_compose. apply WFR'. apply WFR'1.
-    + apply bij_ren_compose; auto.
-    + rewrite <- bij_ren_app_compose; auto.
+  (* Induct on the first peq, then invert on the second peq *)
+  apply peq_tpo_ind; intros; inversion HT'; existT_eq; subst; auto.
+  (* Bag *)
+  - econstructor.
+    (* Construct the composed renamings *)
+    + eapply wf_bij_ren_compose. apply WBF'. apply WBF'2.
+    + eapply wf_bij_ren_compose. apply WBR'. apply WBR'0.
+    (* Processes are peq by induction,
+        requiring the composed renamings be wf and bij *)
+    + dest_wf_bij_ren. 
       rewrite <- bij_ren_app_compose; auto.
-      apply H; auto using wf_bij_app, bij_ren_app.
-  - inversion HT'.
-    existT_eq. subst.
-    assert ((br' (br r)) = ((ren_compose br br') r)) by reflexivity.
+      rewrite <- bij_ren_app_compose; auto.
+      apply H; unfold wf_bij_ren; try split; 
+          auto using wf_bij_app, bij_ren_app.
+  - assert ((br' (br r)) = ((ren_compose br br') r)) by reflexivity.
     rewrite H0.
     econstructor; auto.
-  - inversion HT'.
-    existT_eq. subst.
-    assert ((bf' (bf f)) = ((ren_compose bf bf') f)) by reflexivity.
+  - assert ((bf' (bf f)) = ((ren_compose bf bf') f)) by reflexivity.
     rewrite H.
     assert ((br' (br r)) = ((ren_compose br br') r)) by reflexivity.
     rewrite H0.
     econstructor; auto.
-  - inversion HT'.
-    existT_eq. subst.
-    econstructor; auto.
-  - inversion HT'; existT_eq; subst.
-    auto.
-  - inversion HT'; existT_eq; subst.
-    assert ((br' (br r1)) = ((ren_compose br br') r1)) by reflexivity.
+  - assert ((br' (br r1)) = ((ren_compose br br') r1)) by reflexivity.
     rewrite H.
     assert ((br' (br r2)) = ((ren_compose br br') r2)) by reflexivity.
     rewrite H0.
     econstructor; auto.
-  - inversion HT'.
-    existT_eq. subst.
-    assert ((bf' (bf f)) = ((ren_compose bf bf') f)) by reflexivity.
+  - assert ((bf' (bf f)) = ((ren_compose bf bf') f)) by reflexivity.
     rewrite H.
     econstructor; auto.
-  - inversion HT'.
-    existT_eq. subst.
-    econstructor.
-    
+  - econstructor.
     assert ((ren_id 1) = (ren_compose (ren_id 1) (ren_id 1))).
     { rewrite ren_compose_id_r; auto.
       apply wf_ren_id. } 
     rewrite H0.
     apply H; auto using wf_ren_id, bij_ren_id.
+    (* FRAN: NOT DONE *)
 Qed.
 
 
@@ -1712,7 +1713,7 @@ Proof.
     simpl in H.
     setoid_rewrite (ren_delta_compose _ (ren_id 1) 0 1 (wf_ren_id 1) (bij_ren_id 1)) in H; auto.
 Qed.    
-*)
+
 
 
 
@@ -1929,7 +1930,7 @@ Definition cut_renaming n (r1 r2 r1' r2':nat) : ren n n :=
 
 
               
-(* Inductive prim_step : term -> term -> Prop :=
+ Inductive prim_step : term -> term -> Prop :=
 | step_par_nul :    (* Et <=[ P | nul ] --> Et <=[ P ] *)
   forall Et P,
     prim_step
@@ -1973,10 +1974,10 @@ Definition cut_renaming n (r1 r2 r1' r2':nat) : ren n n :=
              (par
                 (def r (lam (bag m'' n'' Q)))
                 (def r (bng f)))))
-              Q')). *)
+              Q')).
 
 
-(* Lemma wf_prim_step :
+ Lemma wf_prim_step :
   forall m n (G: lctxt m) t t',
     wf_term m n G (zero n) t ->
     prim_step t t' ->
@@ -1996,7 +1997,7 @@ Inductive  step : nat -> nat -> term -> term -> Prop :=
     prim_step m n t1' t2 ->
     step m n t1 t2.
 
- *)
+
 
 
 
