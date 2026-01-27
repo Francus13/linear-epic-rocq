@@ -506,13 +506,6 @@ Module Renamings.
     fun (x:var) =>
       if (lt_dec x n) then x else n.
 
-  Lemma wf_ren_id : forall n, wf_ren (ren_id n).
-  Proof.
-    unfold wf_ren, ren_id.
-    intros.
-    destruct (lt_dec x n); split; tauto.
-  Qed.  
-
   Lemma ren_id_id :
     forall (n : nat) x,
       x < n ->
@@ -582,6 +575,11 @@ Qed.
 
   Definition ren_compose {n m X} (r : ren n m) (c : ctxt m X) : ctxt n X :=
     compose c r.
+
+  Lemma ren_compose_correct : 
+    forall {n m X} (r : ren n m) (c : ctxt m X) (x : nat),
+    (c (r x)) = (ren_compose r c) x.
+  Proof. auto. Qed.
 
 
   #[global] Instance Proper_ren_compose {n m X} (r : ren n m) (HR : wf_ren r) : Proper ((@ctxt_eq X m) ==> (@ctxt_eq X n)) (ren_compose r).
@@ -711,10 +709,39 @@ Qed.
   Definition bij_ren {n} (r : ren n n) :=
     { r_inv : ren n n &  wf_ren r_inv /\ ren_inverses r r_inv }.
 
+  (* FRAN: I have not propogated this through this file, only this Renamings module. *)
+  (* Bundles wf_ren and bij_ren in wf_bij_ren *)
+  Definition wf_bij_ren {n} (r : ren n n) :=
+    {HWB: wf_ren r & bij_ren r}.
+    
+  Definition proj_wf_ren {n r} (HWB : @wf_bij_ren n r) : wf_ren r :=
+    match HWB with existT _ HWF _ => HWF end.
+  Definition proj_bij_ren {n r} (HWB : @wf_bij_ren n r) : bij_ren r :=
+    match HWB with existT _ _ HBJ => HBJ end.
+
+  Definition prod_wf_ren_bij_ren {n r} : Type := (@wf_ren n n r) * (@bij_ren n r).
+  Definition pair_wf_ren_bij_ren {n r} (HWFBJ : prod_wf_ren_bij_ren) : @wf_bij_ren n r :=
+    match HWFBJ with (HWF, HBJ) => existT _ HWF HBJ end.
+
+  Coercion proj_wf_ren : wf_bij_ren >-> wf_ren.
+  Coercion proj_bij_ren : wf_bij_ren >-> bij_ren.
+  Coercion pair_wf_ren_bij_ren : prod_wf_ren_bij_ren >-> wf_bij_ren.
+
+(* FRAN: Is there a way to take a naming pattern as optional parameter? *)
+  Ltac dest_wf_bij_ren :=
+    repeat match goal with
+    | [ H: context[wf_bij_ren ?R] |- _ ] => destruct H
+    end.
+
+  Lemma wf_ren_id : forall n, wf_ren (ren_id n).
+  Proof. 
+    unfold wf_ren, ren_id. intros.
+    destruct (lt_dec x n); split; tauto.
+  Defined.
+
   Lemma bij_ren_id : forall n, bij_ren (ren_id n).
-  Proof.
-    unfold bij_ren, ren_id, wf_ren, ren_inverses.
-    intros.
+  Proof. 
+    unfold bij_ren, ren_id, wf_ren, ren_inverses; intros.
     exists (ren_id n).
     unfold ren_id.
     split; intros; split; intros.
@@ -730,7 +757,9 @@ Qed.
       contradiction.
   Defined.
 
-  
+  Lemma wf_bij_ren_id : forall n, wf_bij_ren (ren_id n).
+  Proof. split. apply wf_ren_id. apply bij_ren_id. Defined.
+
   Definition bij_app {n m} (r1 : ren n n) (r2 : ren m m) : ren (n + m) (n + m) :=
     ctxt_app r1 (fun x => n + (r2 x)).
 
@@ -757,24 +786,21 @@ Qed.
         rewrite H3.
         reflexivity.
   Qed.
+    
 
-
-  (* FRAN: Added this just to bundle, 
-      I have not propogated this through this file.*)
-  Definition wf_bij_ren {n} (r : ren n n) :=
-    {HWFBJ: wf_ren r & bij_ren r}.
-
-  Lemma bij_ren_app :
+  Lemma wf_bij_ren_app :
     forall {n m} (r1 : ren n n) (r2 : ren m m)
       (HWB1 : wf_bij_ren r1)
       (HWB2 : wf_bij_ren r2),
-      @bij_ren (n + m) (bij_app r1 r2).
+      @wf_bij_ren (n + m) (bij_app r1 r2).
   Proof.
-    unfold bij_app, ctxt_app.
     intros.
-    unfold bij_ren.
+    unfold wf_bij_ren, bij_ren.
     destruct HWB1 as [HWF1 [r1_inv [HR1 HI1]]].
     destruct HWB2 as [HWF2 [r2_inv [HR2 HI2]]].
+    split.
+    1: apply wf_bij_app; auto.
+    unfold bij_app, ctxt_app.
     exists (bij_app r1_inv r2_inv).
     split.
     - apply wf_bij_app; auto.
@@ -825,111 +851,87 @@ Qed.
     - destruct (lt_dec x (n + m)); destruct (lt_dec (x - n) m); try lia.
   Qed.
   
+
   Definition bij_inv {n} (r : ren n n) (H : bij_ren r) : ren n n :=
     let (r_inv, _) := H in r_inv.
 
   Lemma bij_inv_id : forall n,
-      bij_inv (ren_id n) (bij_ren_id n) = ren_id n.
-  Proof.
-    intros n.
-    reflexivity.
-  Qed.
+      bij_inv (ren_id n) (wf_bij_ren_id n) = ren_id n.
+  Proof. intros n. reflexivity. Qed.
 
-  Lemma wf_bij_ren_inv : forall n (r : ren n n)
+  Lemma bij_inv_wf : forall n (r : ren n n)
       (BR : bij_ren r),
       wf_ren (bij_inv r BR).
-  Proof.
-    intros.
-    destruct BR as [r_inv [HBR HI]].
-    simpl. auto.
-  Qed.
+  Proof. intros. destruct BR as [r_inv [HBR HI]]; auto. Qed.
 
   Lemma bij_inv_bij :
-    forall n (r : ren n n)
-      (WFR : wf_ren r)
-      (BR : bij_ren r),
-      bij_ren (bij_inv r BR).
+    forall n (r : ren n n) (HWB : wf_bij_ren r),
+      bij_ren (bij_inv r HWB).
   Proof.
-    intros.
-    destruct BR as [r_inv [HBR HI]].
-    simpl.
-    exists r. split; auto. apply ren_inverses_comm. auto.
+    intros. destruct HWB as [HWF [r_inv [HBR HI]]]; simpl.
+    exists r. split; auto using ren_inverses_comm.
   Qed.
 
+  Lemma bij_inv_wf_bij :
+    forall n (r : ren n n) (HWB : wf_bij_ren r),
+      wf_bij_ren (bij_inv r HWB).
+  Proof. split; auto using bij_inv_wf, bij_inv_bij. Qed.
+
+
   Lemma bij_inv_bij_inv_eq :
-    forall n (r : ren n n)
-      (WFR : wf_ren r)
-      (BR : bij_ren r)
-      (HX : bij_ren (bij_inv r BR)),
-      (bij_inv (bij_inv r BR) HX) = r.
-  Proof.
-    intros.
-    destruct BR as [r_inv [WRI BRI]].
-    simpl in *.
-    destruct HX as [r' [WR' BR']].
-    simpl in *.
-    apply functional_extensionality.
-    intros x.
+    forall n (r : ren n n) (HWB : wf_bij_ren r)
+      (HX : bij_ren (bij_inv r HWB)),
+      (bij_inv (bij_inv r HWB) HX) = r.
+  Proof. intros.
+    destruct HWB as [HWF [r_inv [WRI BRI]]]; simpl in *.
+    destruct HX as [r' [WR' BR']]; simpl in *.
+    apply functional_extensionality. intros x.
     destruct (lt_dec x n).
     - unfold ren_inverses in *.
-      assert (r x < n). { apply WFR; auto. }
+      assert (r x < n). { apply HWF; auto. }
       assert (r' (r_inv (r x)) = r x). { apply BR'. assumption. }
       rewrite <- H0.
       assert (r_inv (r x ) = x). {  apply BRI.  assumption. }
       rewrite H1.
       reflexivity.
     - assert (r' x = n). { apply WR'; auto. }
-      assert (r x = n). { apply WFR; auto. }
+      assert (r x = n). { apply HWF; auto. }
       rewrite H. rewrite H0. reflexivity.
   Qed.                               
   
   Lemma bij_inv_app :
     forall n m
       (r1 : ren n n) (r2 : ren m m)
-      (HWF1 : wf_ren r1)
-      (HWF2 : wf_ren r2)
-      (HBR1 : bij_ren r1)
-      (HBR2 : bij_ren r2),
-      bij_inv (bij_app r1 r2) (bij_ren_app r1 r2 HWF1 HWF2 HBR1 HBR2) =
-        bij_app (bij_inv r1 HBR1) (bij_inv r2 HBR2).
-  Proof.
-    intros.
-    destruct HBR1 as [r1_inv [HR1 HI1]].
-    destruct HBR2 as [r2_inv [HR2 HI2]].
+      (HWB1 : wf_bij_ren r1) (HWB2 : wf_bij_ren r2),
+      bij_inv (bij_app r1 r2) (wf_bij_ren_app r1 r2 HWB1 HWB2) =
+        bij_app (bij_inv r1 HWB1) (bij_inv r2 HWB2).
+  Proof. intros.
+    destruct HWB1 as [HWF1 [r1_inv [HR1 HI1]]].
+    destruct HWB2 as [HWF2 [r2_inv [HR2 HI2]]].
     reflexivity.
   Qed.                  
 
   Lemma bij_ren_inv :
-    forall n (r : ren n n) (BR: bij_ren r),
-      wf_ren r ->
-      (ren_compose (bij_inv r BR) r) = (ren_id n).
-  Proof.
-    intros.
-    destruct BR as [r_inv [HR HI]].
-    simpl.
-    apply functional_extensionality.
-    intros.
+    forall n (r : ren n n) (HWB : wf_bij_ren r),
+      (ren_compose (bij_inv r HWB) r) = (ren_id n).
+  Proof. intros.
+    destruct HWB as [HWF [r_inv [HR HI]]]; simpl.
+    apply functional_extensionality. intros.
     unfold ren_compose, compose, ren_id.
     destruct (lt_dec x n).
     - apply HI. assumption.
     - assert (r_inv x = n). { apply HR. assumption. }
-      rewrite H0.
-      apply H.
-      lia.
+      rewrite H. apply HWF. lia.
   Qed.
 
   Lemma bij_ren_inv_elt :
-    forall n (r : ren n n) (BR : bij_ren r) x,
-      wf_ren r ->
+    forall n (r : ren n n) (HWB : wf_bij_ren r) x,
       x < n ->
-      x = ((bij_inv r BR) (r x)).
-  Proof.
-    intros.
-    destruct BR as [r_inv [HR HI]].
-    simpl.
-    apply HI in H0.
-    destruct H0.
-    symmetry. auto.
+      x = ((bij_inv r HWB) (r x)).
+  Proof. intros.
+    destruct HWB as [HWF [r_inv [HR HI]]]; simpl.
+    apply HI in H. destruct H.
+    symmetry; auto.
   Qed.
   
   Lemma bij_ren_elt : forall n (r : ren n n),
@@ -946,26 +948,24 @@ Qed.
 
   Lemma bij_ren_compose :
     forall n (r1 : ren n n) (r2 : ren n n)
-      (WF1 : wf_ren r1),
-      bij_ren r1 ->
-      bij_ren r2 ->
+      (HWB1 : wf_bij_ren r1) (HBJ2 : bij_ren r2),
       bij_ren (ren_compose r1 r2).
   Proof.
     unfold bij_ren, ren_inverses, ren_compose. intros.
-    destruct X as [r1_inv [HWF1 HEQ1]].
-    destruct X0 as [r2_inv [HWF2 HEQ2]].
+    destruct HWB1 as [HWF1 [r1_inv [HWF1' HEQ1]]].
+    destruct HBJ2 as [r2_inv [HWF2' HEQ2]].
     exists (ren_compose r2_inv r1_inv).
     split.
     - apply wf_ren_compose; auto.
     - split.
       + unfold ren_compose, compose.
-        assert ((r1 x) < n). { apply WF1. auto. }
+        assert ((r1 x) < n). { apply HWF1. auto. }
         destruct (HEQ2 (r1 x) H0).
         rewrite H1.
         destruct (HEQ1 x H).
         rewrite H3. reflexivity.
       + unfold ren_compose, compose.
-        assert ((r2_inv x) < n). { apply HWF2.  auto. } 
+        assert ((r2_inv x) < n). { apply HWF2'.  auto. } 
         destruct (HEQ1 (r2_inv x) H0).
         rewrite H2.
         destruct (HEQ2 x H).
@@ -973,24 +973,28 @@ Qed.
         reflexivity.
   Defined.
 
-  Lemma bij_ren_app_compose :
+
+Lemma wf_bij_ren_compose :
+  forall n (r1 : ren n n) (r2 : ren n n)
+    (HWB1 : wf_bij_ren r1) (HWB2 : wf_bij_ren r2),
+    wf_bij_ren (ren_compose r1 r2).
+Proof.
+  intros; remember HWB1 as HWB1_copy; split;
+  destruct HWB1; destruct HWB2; auto using wf_ren_compose, bij_ren_compose.
+Qed.
+
+  Lemma wf_bij_ren_app_compose :
     forall n m (r11 r12 : ren n n) (r21 r22 : ren m m)
-      (WFR11 : wf_ren r11)
-      (WFR12 : wf_ren r12)
-      (WFR21 : wf_ren r21)
-      (WFR22 : wf_ren r22)
-      (HB11 : bij_ren r11)
-      (HB12 : bij_ren r12)
-      (HB21 : bij_ren r21)
-      (HB22 : bij_ren r22),
+      (HWB11 : wf_bij_ren r11) (HWB12 : wf_bij_ren r12)
+      (HWB21 : wf_bij_ren r21) (HWB22 : wf_bij_ren r22),
       ren_compose (bij_app r11 r21) (bij_app r12 r22) =
         bij_app (ren_compose r11 r12) (ren_compose r21 r22).
   Proof.
     intros.
-    destruct HB11 as [r11_inv [HR11 HI11]].
-    destruct HB12 as [r12_inv [HR12 HI12]].
-    destruct HB21 as [r21_inv [HR21 HI21]].
-    destruct HB22 as [r22_inv [HR22 HI22]].
+    destruct HWB11 as [HWF11 [r11_inv [HR11 HI11]]].
+    destruct HWB12 as [HWF12 [r12_inv [HR12 HI12]]].
+    destruct HWB21 as [HWF21 [r21_inv [HR21 HI21]]].
+    destruct HWB22 as [HWF22 [r22_inv [HR22 HI22]]].
     unfold ren_compose.
     unfold bij_app.
     unfold ctxt_app, compose.
@@ -999,7 +1003,7 @@ Qed.
     destruct (lt_dec x n).
     - destruct (lt_dec (r11 x) n).
       + reflexivity.
-      + assert (r11 x < n). { apply WFR11. auto. }
+      + assert (r11 x < n). { apply HWF11. auto. }
         contradiction.
     - destruct (lt_dec (n + r21 (x - n)) n).
       + lia.
@@ -1012,20 +1016,17 @@ Qed.
   Lemma ren_compose_app :
     forall m n  X
       (r1 : ren m m)  (r2 : ren n n)
-      (HR1 : wf_ren r1) (HR2 : wf_ren r2)
-      (HBR1 : bij_ren r1) (HBR2 : bij_ren r2)
+      (HWB1 : wf_bij_ren r1) (HWB2 : wf_bij_ren r2)
       (c : ctxt m X) (d : ctxt n X),
       (ren_compose r1 c) ⊗ (ren_compose r2 d) = 
         ren_compose (bij_app r1 r2) (c ⊗ d).
   Proof.
-    intros.
-    apply functional_extensionality.
-    intros.
+    intros. apply functional_extensionality. intros.
     unfold ren_compose, compose, bij_app, ctxt_app.
-    destruct (lt_dec x m).
+    dest_wf_bij_ren. destruct (lt_dec x m).
     - destruct (lt_dec (r1 x) m).
       + reflexivity.
-      + assert (r1 x < m). { apply HR1. assumption. }
+      + assert (r1 x < m). { apply x1. assumption. }
         contradiction.
     - destruct (lt_dec (m + r2 (x - m)) m).
       + lia.
@@ -1035,14 +1036,13 @@ Qed.
 
   Lemma bij_app_inv :
     forall m m' (r1 : ren m m) (r2 : ren m' m')
-      (WF1 : wf_ren r1) (WF2 : wf_ren r2)
-      (BR1 : bij_ren r1) (BR2 : bij_ren r2),
-      bij_app (bij_inv r1 BR1) (bij_inv r2 BR2) =
-        bij_inv (bij_app r1 r2) (bij_ren_app r1 r2 WF1 WF2 BR1 BR2).
+      (HWB1 : wf_bij_ren r1) (HWB2 : wf_bij_ren r2),
+      bij_app (bij_inv r1 HWB1) (bij_inv r2 HWB2) =
+        bij_inv (bij_app r1 r2) (wf_bij_ren_app r1 r2 HWB1 HWB2).
   Proof.
     intros.
-    destruct BR1 as [r1_inv [WFI1 BRI1]].
-    destruct BR2 as [r2_inv [FWI2 BRI2]].
+    destruct HWB1 as [HWF1 [r1_inv [WFI1 BRI1]]].
+    destruct HWB2 as [HWF2 [r2_inv [FWI2 BRI2]]].
     reflexivity.
   Qed.
   
@@ -1050,15 +1050,12 @@ Qed.
      out-of-scope variables to be canonical, lets us prove this
      equivalence.
    *) 
-  Lemma bij_ren_app_inv_compose_id :
-    forall n (r : ren n n)
-      (WFR : wf_ren r)
-      (HB: bij_ren r),
-      ren_compose r (bij_inv r HB) = ren_id n.
+  Lemma wf_bij_ren_app_inv_compose_id :
+    forall n (r : ren n n) (HWB : wf_bij_ren r),
+      ren_compose r (bij_inv r HWB) = ren_id n.
   Proof.
     intros.
-    destruct HB as [r_inv [HR HI]].
-    simpl.
+    destruct HWB as [HWF [r_inv [HR HI]]]; simpl.
     unfold ren_inverses in HI.
     unfold ren_compose, compose, ren_id.
     apply functional_extensionality.
@@ -1066,7 +1063,7 @@ Qed.
     destruct (lt_dec x n).
     + apply HI. assumption.
     + assert (r x = n).
-      apply WFR. assumption.
+      apply HWF. assumption.
       rewrite H.
       apply HR.
       lia.
@@ -1083,35 +1080,32 @@ Qed.
 
   Lemma bij_ren_var :
     forall n (r : ren n n) x y
-      (WFR : wf_ren r)
-      (H : bij_ren r),
+      (HWB : wf_bij_ren r),
       x < n ->
       y < n ->
-      r x = y <-> x = (bij_inv r H) y.
+      r x = y <-> x = (bij_inv r HWB) y.
   Proof.
     intros.
-    destruct H as [r_inv [HWRI HE]].
+    destruct HWB as [HWF [r_inv [HWRI HE]]].
     simpl.
     unfold ren_inverses in HE.
     split; intros; subst.
-    - specialize (HE _ H0).
+    - specialize (HE _ H).
       destruct HE.
-      rewrite H. reflexivity.
-    - specialize (HE _ H1).
+      rewrite H1. reflexivity.
+    - specialize (HE _ H0).
       destruct HE.
       assumption.
   Qed.
       
   Lemma ren_delta_compose :
-    forall n (r : ren n n) x c
-      (WFR : wf_ren r)
-      (H : bij_ren r),
+    forall n (r : ren n n) x c (HWB : wf_bij_ren r),
       x < n ->
-      ren_compose r (n[x ↦ c]) = n[((bij_inv r H)  x) ↦ c].
+      ren_compose r (n[x ↦ c]) = n[((bij_inv r HWB)  x) ↦ c].
   Proof.
     intros.
     unfold ren_compose, compose, delta.
-    destruct H as [r_inv [HWF HEQ]].
+    destruct HWB as [HWF [r_inv [HWF' HEQ]]].
     simpl.
     apply functional_extensionality.
     intros y.
@@ -1119,15 +1113,15 @@ Qed.
     destruct (Nat.eq_dec x (r y)); subst.
     
     - destruct (lt_dec (r_inv (r y)) n); try lia.
-      unfold ren_inverses in HEQ. unfold wf_ren in WFR.
+      unfold ren_inverses in HEQ. unfold wf_ren in HWF.
       assert (y < n).
-      { specialize (WFR y); destruct WFR. lia. }
+      { specialize (HWF y); destruct HWF. lia. }
       specialize (HEQ y); destruct HEQ; try lia.
       destruct (Nat.eq_dec (r_inv (r y)) y); try lia.
       unfold ren_inverses in HEQ. 
       specialize (HEQ (r y)); destruct HEQ; try lia.
       unfold wf_ren in HWF.
-      specialize (HWF (r y)); try lia.
+      specialize (HWF' (r y)); try lia.
 
     - destruct (lt_dec (r_inv x) n); try lia.
       destruct (Nat.eq_dec (r_inv x) y); try lia.
@@ -1148,12 +1142,9 @@ Qed.
   Qed.    
   
   Lemma ren_one_compose :
-    forall n (r : ren n n)
-      (WFR : wf_ren r)
-      (H : bij_ren r)
-      x,
+    forall n (r : ren n n) (HWB : wf_bij_ren r) x,
       x < n ->
-      ren_compose r (one n x) = one n ((bij_inv r H) x).
+      ren_compose r (one n x) = one n ((bij_inv r HWB) x).
   Proof.
     intros.
     unfold one.
@@ -1171,6 +1162,29 @@ Qed.
     - simpl. rewrite ren_sum_compose.
       rewrite IHl. reflexivity.
   Qed.
+
+
+(* FRAN: Is this relevant? *)
+Lemma map_ext_Forall_partial :
+    forall A B (f g : A -> B) (l : list A) (P : A -> Prop),
+    (forall x, P x -> f x = g x) ->
+    Forall P l -> map f l = map g l.
+Proof.
+  intros. induction l.
+  - reflexivity.
+  - inversion H0; subst; simpl.
+    rewrite H; auto. rewrite IHl; auto.
+Qed.    
+
+Lemma Forall_ren_wf :
+  forall n (r : ren n n) (HR: wf_ren r) (rs:list var),
+    Forall (fun x => x < n) rs ->
+    Forall (fun x => x < n) (map r rs).
+Proof.
+  intros. apply Forall_map. eapply Forall_impl.
+  2 : { apply H. }
+  apply HR.
+Qed.  
   
 End Renamings.  
 

@@ -1075,29 +1075,6 @@ meaning of the term.
 
 *)
 
-(* FRAN: Temporary, should be in Contexts.v.*)
-Definition wf_bij_ren {n} (r : ren n n) :=
-  {HWFBJ: wf_ren r & bij_ren r}.
-
-Lemma wf_bij_ren_compose :
-  forall n (r1 : ren n n) (r2 : ren n n)
-    (WB1 : wf_bij_ren r1) (WB2 : wf_bij_ren r2),
-    wf_bij_ren (ren_compose r1 r2).
-Proof.
-  unfold wf_bij_ren; intros.
-  destruct WB1; destruct WB2; split;
-  auto using wf_ren_compose, bij_ren_compose.
-Qed.
-
-Ltac dest_wf_bij_ren :=
-  repeat match goal with
-    | [ H: context[wf_bij_ren ?R] |- _ ] => destruct H
-    end.
-  
-
-
-
-
 Unset Elimination Schemes.
 Inductive peq_term :
   forall (m n:nat) (bf : ren m m) (br : ren n n) , term -> term -> Prop :=
@@ -1170,6 +1147,7 @@ Scheme peq_term_ind := Induction for peq_term Sort Prop
 
 Combined Scheme peq_tpo_ind from peq_term_ind, peq_proc_ind, peq_oper_ind.
 
+
 Lemma peq_compose_tpo :
   (forall (m n:nat) (bf : ren m m) (br : ren n n) (t t' : term)
      (HT: peq_term m n bf br t t'),
@@ -1195,112 +1173,90 @@ Lemma peq_compose_tpo :
       (HT' : peq_oper m n bf' br' o' o''),
       peq_oper m n (ren_compose bf bf') (ren_compose br br') o o'').
 Proof.
-  (* Induct on the first peq, then invert on the second peq *)
-  apply peq_tpo_ind; intros; inversion HT'; existT_eq; subst; auto.
+  (* Induct on the first peq *)
+  apply peq_tpo_ind; intros.
+  (* Invert the second peq *)
+  all: inversion HT'; existT_eq; subst; auto.
+  (* Most cases solved by composing the renamings,
+      followed by the corresponding peq constructor and IHs *)
+  all: try solve [
+    repeat rewrite (ren_compose_correct br br'); 
+    repeat rewrite (ren_compose_correct bf bf');
+    econstructor; auto
+  ]. 
   (* Bag *)
   - econstructor.
-    (* Construct the composed renamings *)
+    (* Construct what the composed renamings will be *)
     + eapply wf_bij_ren_compose. apply WBF'. apply WBF'2.
     + eapply wf_bij_ren_compose. apply WBR'. apply WBR'0.
-    (* Processes are peq by induction,
-        requiring the composed renamings be wf and bij *)
-    + dest_wf_bij_ren. 
-      rewrite <- bij_ren_app_compose; auto.
-      rewrite <- bij_ren_app_compose; auto.
-      apply H; unfold wf_bij_ren; try split; 
-          auto using wf_bij_app, bij_ren_app.
-  - assert ((br' (br r)) = ((ren_compose br br') r)) by reflexivity.
-    rewrite H0.
-    econstructor; auto.
-  - assert ((bf' (bf f)) = ((ren_compose bf bf') f)) by reflexivity.
-    rewrite H.
-    assert ((br' (br r)) = ((ren_compose br br') r)) by reflexivity.
-    rewrite H0.
-    econstructor; auto.
-  - assert ((br' (br r1)) = ((ren_compose br br') r1)) by reflexivity.
-    rewrite H.
-    assert ((br' (br r2)) = ((ren_compose br br') r2)) by reflexivity.
-    rewrite H0.
-    econstructor; auto.
-  - assert ((bf' (bf f)) = ((ren_compose bf bf') f)) by reflexivity.
-    rewrite H.
-    econstructor; auto.
+    (* Processes are peq by IH 
+        (which requires the composed renamings be wf and bij) *)
+    + rewrite <- wf_bij_ren_app_compose; auto.
+      rewrite <- wf_bij_ren_app_compose; auto.
+      apply H; auto using wf_bij_ren_app.
+  (* Lam *)
   - econstructor.
-    assert ((ren_id 1) = (ren_compose (ren_id 1) (ren_id 1))).
-    { rewrite ren_compose_id_r; auto.
-      apply wf_ren_id. } 
-    rewrite H0.
-    apply H; auto using wf_ren_id, bij_ren_id.
-    (* FRAN: NOT DONE *)
+    (* Introduce an identity renaming to compose with *)
+    rewrite <- (ren_compose_id_r _ _ (ren_id 1) (wf_bij_ren_id 1)).
+    (* Terms are peq by IH *)
+    apply H; auto using wf_bij_ren_id.
 Qed.
 
 
 Lemma peq_inv_tpo :
   (forall (m n:nat) (bf : ren m m) (br : ren n n) (t t' : term)
      (HT: peq_term m n bf br t t'),
-    forall (WFF : wf_ren bf) (WFR : wf_ren br)
-      (BF : bij_ren bf) (BR : bij_ren br),
-      peq_term m n (bij_inv bf BF) (bij_inv br BR) t' t)
+    forall (WBF : wf_bij_ren bf) (WBR : wf_bij_ren br),
+      peq_term m n (bij_inv bf WBF) (bij_inv br WBR) t' t)
   /\
   (forall (m n:nat) (bf : ren m m) (br : ren n n) (P P' : proc)
      (HT: peq_proc m n bf br P P'),
-    forall (WFF : wf_ren bf) (WFR : wf_ren br)
-      (BF : bij_ren bf) (BR : bij_ren br),
-      peq_proc m n (bij_inv bf BF) (bij_inv br BR) P' P)
+    forall (WBF : wf_bij_ren bf) (WBR : wf_bij_ren br),
+      peq_proc m n (bij_inv bf WBF) (bij_inv br WBR) P' P)
   /\
   (forall (m n:nat) (bf : ren m m) (br : ren n n) (o o' : oper)
      (HT: peq_oper m n bf br o o'),
-    forall (WFF : wf_ren bf) (WFR : wf_ren br)
-      (BF : bij_ren bf) (BR : bij_ren br),
-      peq_oper m n (bij_inv bf BF) (bij_inv br BR) o' o).
+    forall (WBF : wf_bij_ren bf) (WBR : wf_bij_ren br),
+      peq_oper m n (bij_inv bf WBF) (bij_inv br WBR) o' o).
 Proof.
   apply peq_tpo_ind; intros.
-  - apply peq_bag with (bf' := bij_inv bf' HBF') (br' := bij_inv br' HBR').
-    apply wf_bij_ren_inv.
-    apply bij_inv_bij; auto.
-    apply wf_bij_ren_inv.
-    apply bij_inv_bij; auto.
-    rewrite <- bij_inv_app 
-      with (HWF1 := WFF')(HWF2 := WFF).    
-    rewrite <- bij_inv_app with (HWF1 := WFR')(HWF2 := WFR).
+  (* Most cases are by IH after expanding x to ((bij_inv r _) (r x)) *)
+  (* FRAN: Can't figure out how to make this cleanly repeat without diverging *)
+  all: try solve [auto;
+    match goal with
+      (* 2 variables for 2 renamings (app) *)
+      | [ _: ?x < ?n, _: ?y < ?m, r: ren ?n ?n, r': ren ?m ?m,
+              WB: wf_bij_ren ?r, WB': wf_bij_ren ?r' |- _ ] => 
+          assert (x = ((bij_inv r WB) (r x))) as ?HI;
+            try solve [apply bij_ren_inv_elt; auto];
+          assert (y = ((bij_inv r' WB') (r' y))) as ?HI';
+            try solve [apply bij_ren_inv_elt; auto];
+          rewrite HI at 2; rewrite HI' at 2
+      (* 2 variables for 1 renaming (tup) *)
+      | [ _: ?x < ?n, _: ?y < ?n, r: ren ?n ?n, WB: wf_bij_ren ?r |- _ ] => 
+          assert (x = ((bij_inv r WB) (r x))) as ?HI;
+            try solve [apply bij_ren_inv_elt; auto];
+          assert (y = ((bij_inv r WB) (r y))) as ?HI';
+            try solve [apply bij_ren_inv_elt; auto];
+          rewrite HI at 2; rewrite HI' at 2
+      (* 1 variables for 1 renaming (def) *)
+      | [ _: ?x < ?n, r: ren ?n ?n, WB: wf_bij_ren ?r |- _ ] => 
+          assert (x = ((bij_inv r WB) (r x))) as ?HI;
+            try solve [apply bij_ren_inv_elt; auto];
+          rewrite HI at 2
+      end; 
+    constructor; repeat try (apply WBF; auto); repeat try (apply WBR; auto); auto]. 
+  (* Bag *)
+  - apply peq_bag with (bf' := bij_inv bf' WBF') (br' := bij_inv br' WBR').
+    1, 2 : auto using bij_inv_wf_bij.
+    rewrite <- bij_inv_app with (HWB1 := WBF')(HWB2 := WBF).    
+    rewrite <- bij_inv_app with (HWB1 := WBR')(HWB2 := WBR).
     apply H.
-    apply wf_bij_app; auto.
-    apply wf_bij_app; auto.
-  - assert (r = ((bij_inv br BR) (br r))).
-    { apply bij_ren_inv_elt; auto. }
-    rewrite H0 at 2.
-    constructor; auto.
-    apply WFR; auto.
-  - assert (r = ((bij_inv br BR) (br r))).
-    { apply bij_ren_inv_elt; auto. }
-    rewrite H at 2.
-    assert (f = ((bij_inv bf BF) (bf f))).
-    { apply bij_ren_inv_elt; auto. }
-    rewrite H0 at 2.
-    constructor; auto.
-    apply WFF; auto.
-    apply WFR; auto.
-  - constructor; auto.
-  - constructor; auto.
-  - assert (r1 = ((bij_inv br BR) (br r1))).
-    { apply bij_ren_inv_elt; auto. }
-    rewrite H at 2.
-    assert (r2 = ((bij_inv br BR) (br r2))).
-    { apply bij_ren_inv_elt; auto. }
-    rewrite H0 at 2.
-    econstructor.
-    apply WFR; auto.
-    apply WFR; auto.
-  - assert (f = ((bij_inv bf BF) (bf f))).
-    { apply bij_ren_inv_elt; auto. }
-    rewrite H at 2.
-    constructor; auto.
-    apply WFF; auto.
+  (* Lam *)
   - constructor; auto.
     rewrite <- bij_inv_id.
     apply H; auto.
-    apply wf_ren_id.
-Qed.    
+Qed.
 
 
 (* As defined, renaming by the identity isn't reflexive because it requires that
@@ -1318,20 +1274,23 @@ Lemma peq_id_refl_tpo :
         peq_oper m n (ren_id m) (ren_id n) o o).
 Proof.
   apply ws_tpo_ind; intros.
-  - econstructor; eauto using wf_ren_id, bij_ren_id.
+  (* Most cases are by IH after expanding x to ((ren_id _) x) *)
+  (* FRAN: Similar to above, would be nice to have the match repeat without diverging *)
+  all: try solve [auto; 
+    match goal with
+      (* 2 variables *)
+      | [ _: ?x < ?n, _: ?y < ?m |- _ ] => 
+          rewrite <- (ren_id_id n x) at 2; auto;
+          rewrite <- (ren_id_id m y) at 2; auto
+      (* 1 variable *)
+      | [ _: ?x < ?n |- _ ] => 
+          rewrite <- (ren_id_id n x) at 2; auto
+      end].
+  (* Bag *)
+  - econstructor; eauto using wf_bij_ren_id.
     rewrite bij_app_id.
     rewrite bij_app_id.
     apply H.
-  - rewrite <- (ren_id_id n r) at 2; auto.
-  - rewrite <- (ren_id_id m f) at 2; auto.
-    rewrite <- (ren_id_id n r) at 2; auto.
-  - econstructor; eauto.
-  - auto.
-  - rewrite <- (ren_id_id n r1) at 2; auto.
-    rewrite <- (ren_id_id n r2) at 2; auto.
-  - rewrite <- (ren_id_id m f) at 2; auto.
-  - econstructor.
-    auto.
 Qed.
 
 (* We can existentially quantify over the renamings to get a "permutation"
@@ -1339,40 +1298,30 @@ Qed.
    a partial equivalence relation (PER).
  *)
 
+ (* FRAN: Why are these parameterized by their variable bindings? *)
+
 Inductive peq_t (m n : nat) (t t' : term) : Prop :=
 | peq_t_intro :
-  forall (bf : ren m m)
-    (br : ren n n)
-    (HWF : wf_ren bf)
-    (HBF : bij_ren bf)
-    (HWR : wf_ren br)
-    (HBR : bij_ren br)
+  forall (bf : ren m m) (br : ren n n)
+    (WBF : wf_bij_ren bf) (WBR : wf_bij_ren br)
     (EQ : peq_term m n bf br t t'),
     peq_t m n t t'.
 
 Inductive peq_p (m n : nat) (P P' : proc) : Prop :=
 | peq_p_intro :
-  forall (bf : ren m m)
-    (br : ren n n)
-    (HWF : wf_ren bf)
-    (HBF : bij_ren bf)
-    (HWR : wf_ren br)
-    (HBR : bij_ren br)
+  forall (bf : ren m m) (br : ren n n)
+    (WBF : wf_bij_ren bf) (WBR : wf_bij_ren br)
     (EQ : peq_proc m n bf br P P'),
     peq_p m n P P'.
 
 Inductive peq_o (m n : nat) (o o' : oper) : Prop :=
 | peq_o_intro :
-  forall (bf : ren m m)
-    (br : ren n n)
-    (HWF : wf_ren bf)
-    (HBF : bij_ren bf)
-    (HWR : wf_ren br)
-    (HBR : bij_ren br)
+  forall (bf : ren m m) (br : ren n n)
+    (WBF : wf_bij_ren bf) (WBR : wf_bij_ren br)
     (EQ : peq_oper m n bf br o o'),
     peq_o m n o o'.
 
-
+(* FRAN: Why can't I use this notation to replace (peq_t m n t t) below? *)
 Infix "[t≡ m n ]" := (peq_t m n) (at level 55).
 Infix "[p≡ m n ]" := (peq_p m n) (at level 55).
 Infix "[o≡ m n ]" := (peq_o m n) (at level 55).
@@ -1380,206 +1329,91 @@ Infix "[o≡ m n ]" := (peq_o m n) (at level 55).
 Lemma peq_t_refl : forall m n t,
     ws_term m n t ->
     peq_t m n t t.
-Proof.
-  intros.
-  specialize (peq_id_refl_tpo).
-  intros.
-  destruct H0 as [HT _].
-  specialize (HT m n t H).
-  econstructor; eauto using wf_ren_id, bij_ren_id.
-Qed.
-
+Proof. specialize (peq_id_refl_tpo); intros.
+  destruct H as [HT _].
+  specialize (HT m n t H0).
+  econstructor; eauto using wf_bij_ren_id. Qed.
 Lemma peq_p_refl : forall m n P,
     ws_proc m n P ->
     peq_p m n P P.
-Proof.
-  intros.
-  specialize (peq_id_refl_tpo).
-  intros.
-  destruct H0 as [_ [HP _]].
-  specialize (HP m n P H).
-  econstructor; eauto using wf_ren_id, bij_ren_id.
-Qed.
-
+Proof. specialize (peq_id_refl_tpo); intros.
+  destruct H as [_ [HP _]].
+  specialize (HP m n P  H0).
+  econstructor; eauto using wf_bij_ren_id. Qed.
 Lemma peq_o_refl : forall m n o,
     ws_oper m n o ->
     peq_o m n o o.
-Proof.
-  intros.
-  specialize (peq_id_refl_tpo).
-  intros.
-  destruct H0 as [_ [_ HO]].
-  specialize (HO m n o H).
-  econstructor; eauto using wf_ren_id, bij_ren_id.
-Qed.
-
+Proof. specialize (peq_id_refl_tpo); intros.
+  destruct H as [_ [_ HO]].
+  specialize (HO m n o H0).
+  econstructor; eauto using wf_bij_ren_id. Qed.
 
 #[global] Instance Transitive_peq_term {m n} : Transitive (peq_t m n).
-Proof.
-  unfold Transitive.
-  intros.
-  inversion H.
-  inversion H0.
-  econstructor.
-  5 : { eapply peq_compose_tpo; eauto. }
-  apply wf_ren_compose; auto.
-  apply bij_ren_compose; auto.
-  apply wf_ren_compose; auto.
-  apply bij_ren_compose; auto.
-Qed.
-
+Proof. unfold Transitive; intros. inversion H; inversion H0. econstructor.
+  3 : eapply peq_compose_tpo; eauto. 
+  all: auto using wf_bij_ren_compose. Qed.
 #[global] Instance Transitive_peq_proc {m n} : Transitive (peq_p m n).
-Proof.
-  unfold Transitive.
-  intros.
-  inversion H.
-  inversion H0.
-  econstructor.
-  5 : { eapply peq_compose_tpo; eauto. }
-  apply wf_ren_compose; auto.
-  apply bij_ren_compose; auto.
-  apply wf_ren_compose; auto.
-  apply bij_ren_compose; auto.
-Qed.
-
+Proof. unfold Transitive; intros. inversion H; inversion H0. econstructor.
+  3 : eapply peq_compose_tpo; eauto. 
+  all: auto using wf_bij_ren_compose. Qed.
 #[global] Instance Transitive_peq_oper {m n} : Transitive (peq_o m n).
-Proof.
-  unfold Transitive.
-  intros.
-  inversion H.
-  inversion H0.
-  econstructor.
-  5 : { eapply peq_compose_tpo; eauto. }
-  apply wf_ren_compose; auto.
-  apply bij_ren_compose; auto.
-  apply wf_ren_compose; auto.
-  apply bij_ren_compose; auto.
-Qed.
+Proof. unfold Transitive; intros. inversion H; inversion H0. econstructor.
+  3 : eapply peq_compose_tpo; eauto. 
+  all: auto using wf_bij_ren_compose. Qed.
 
 #[global] Instance Symmetric_peq_term {m n} : Symmetric (peq_t m n).
-Proof.
-  unfold Symmetric.
-  intros.
-  inversion H.
-  apply peq_t_intro with (bf := bij_inv bf HBF)(br := bij_inv br HBR).
-  apply wf_bij_ren_inv.
-  apply bij_inv_bij; auto.
-  apply wf_bij_ren_inv.
-  apply bij_inv_bij; auto.
-  eapply peq_inv_tpo; eauto. 
-Qed.
-
+Proof. unfold Symmetric; intros. inversion H.
+  apply peq_t_intro with (bf := bij_inv bf WBF)(br := bij_inv br WBR).
+  1, 2 : auto using bij_inv_wf_bij.
+  apply peq_inv_tpo; auto. Qed.
 #[global] Instance Symmetric_peq_proc {m n} : Symmetric (peq_p m n).
-Proof.
-  unfold Symmetric.
-  intros.
-  inversion H.
-  apply peq_p_intro with (bf := bij_inv bf HBF)(br := bij_inv br HBR).
-  apply wf_bij_ren_inv.
-  apply bij_inv_bij; auto.
-  apply wf_bij_ren_inv.
-  apply bij_inv_bij; auto.
-  eapply peq_inv_tpo; eauto. 
-Qed.
-
+Proof. unfold Symmetric; intros. inversion H.
+  apply peq_p_intro with (bf := bij_inv bf WBF)(br := bij_inv br WBR).
+  1, 2 : auto using bij_inv_wf_bij.
+  apply peq_inv_tpo; auto. Qed.
 #[global] Instance Symmetric_peq_oper {m n} : Symmetric (peq_o m n).
-Proof.
-  unfold Symmetric.
-  intros.
-  inversion H.
-  apply peq_o_intro with (bf := bij_inv bf HBF)(br := bij_inv br HBR).
-  apply wf_bij_ren_inv.
-  apply bij_inv_bij; auto.
-  apply wf_bij_ren_inv.
-  apply bij_inv_bij; auto.
-  eapply peq_inv_tpo; eauto. 
-Qed.
+Proof. unfold Symmetric; intros. inversion H.
+  apply peq_o_intro with (bf := bij_inv bf WBF)(br := bij_inv br WBR).
+  1, 2 : auto using bij_inv_wf_bij.
+  apply peq_inv_tpo; auto. Qed.
 
-Lemma map_ext_Forall_partial :
-    forall A B (f g : A -> B) (l : list A) (P : A -> Prop),
-    (forall x, P x -> f x = g x) ->
-    Forall P l -> map f l = map g l.
-Proof.
-  intros.
-  induction l.
-  - reflexivity.
-  - inversion H0; subst.
-    simpl.
-    rewrite H; auto.
-    rewrite IHl; auto.
-Qed.    
-
-Lemma Forall_ren_wf :
-  forall n (r : ren n n) (HR: wf_ren r) (rs:list var),
-    Forall (fun x => x < n) rs ->
-    Forall (fun x => x < n) (map r rs).
-Proof.
-  intros.
-  apply Forall_map.
-  eapply Forall_impl.
-  2 : { apply H. }
-  apply HR.
-Qed.  
 
 (* Well-formedness also respects permutation equivalence, but we have to compose
    the context with the *inverse* renaming to explain how the book keeping works
    out.  *) 
 Lemma peq_wf_tpo :
-  (forall (m n:nat)
-      (G : lctxt m)
-      (D : lctxt n)
-      (t1 : term), 
-      wf_term m n G D t1 ->
-      forall (t2 : term)
-        (bf : ren m m) (br : ren n n) ,
+  (forall (m n:nat) (t1 : term), 
+      wf_term m n t1 ->
+      forall (t2 : term) (bf : ren m m) (br : ren n n),
         peq_term m n bf br t1 t2 ->
-        forall (HWF : wf_ren bf)
-          (HBF : bij_ren bf)
-          (HWR : wf_ren br)
-          (HBR : bij_ren br),
-          wf_term m n
-          (ren_compose (bij_inv bf HBF) G)
-          (ren_compose (bij_inv br HBR) D)
-          t2)
-  /\ (forall (m n:nat)
-       (G : lctxt m)
-       (D : lctxt n)
-       (P1 : proc), 
+        forall (WBF : wf_bij_ren bf) (WBR : wf_bij_ren br),
+          wf_term m n t2)
+  /\ (forall (m n:nat) (G : lctxt m) (D : lctxt n) (P1 : proc), 
         wf_proc m n G D P1 ->
-        forall (P2 : proc)
-          (bf : ren m m) (br : ren n n) ,
+      forall (P2 : proc) (bf : ren m m) (br : ren n n),
           peq_proc m n bf br P1 P2 ->
-          forall (HWF : wf_ren bf)
-            (HBF : bij_ren bf)
-            (HWR : wf_ren br)
-            (HBR : bij_ren br),
-            wf_proc m n
-              (ren_compose (bij_inv bf HBF) G)
-              (ren_compose (bij_inv br HBR) D)
+        forall (WBF : wf_bij_ren bf) (WBR : wf_bij_ren br),
+          wf_proc m n
+              (ren_compose (bij_inv bf WBF) G)
+              (ren_compose (bij_inv br WBR) D)
               P2)
-  /\ (forall (m n:nat)
-       (G : lctxt m)
-       (D : lctxt n)
-       (o1 : oper), 
+  /\ (forall (m n:nat) (G : lctxt m) (D : lctxt n) (o1 : oper),  
         wf_oper m n G D o1 ->
-        forall (o2 : oper)
-          (bf : ren m m) (br : ren n n) ,
+      forall (o2 : oper) (bf : ren m m) (br : ren n n),
           peq_oper m n bf br o1 o2 ->
-          forall (HWF : wf_ren bf)
-            (HBF : bij_ren bf)
-            (HWR : wf_ren br)
-            (HBR : bij_ren br),
-            wf_oper m n
-              (ren_compose (bij_inv bf HBF) G)
-              (ren_compose (bij_inv br HBR) D)
+        forall (WBF : wf_bij_ren bf) (WBR : wf_bij_ren br),
+          wf_oper m n
+              (ren_compose (bij_inv bf WBF) G)
+              (ren_compose (bij_inv br WBR) D)
               o2).
 Proof.
   apply wf_tpo_ind; intros.
+  (* Bag *)
   - inversion H0; existT_eq; subst.
-    assert (wf_ren (bij_inv bf HBF)) by apply wf_bij_ren_inv.
-    assert (wf_ren (bij_inv br HBR)) by apply wf_bij_ren_inv.    
-    assert (wf_ren (bij_inv bf' HBF')) by apply wf_bij_ren_inv.
-    assert (wf_ren (bij_inv br' HBR')) by apply wf_bij_ren_inv.
+    assert (wf_ren (bij_inv bf HBF)) by apply wf_bij_inv.
+    assert (wf_ren (bij_inv br HBR)) by apply wf_bij_inv.    
+    assert (wf_ren (bij_inv bf' HBF')) by apply wf_bij_inv.
+    assert (wf_ren (bij_inv br' HBR')) by apply wf_bij_inv.
     assert (bij_ren (bij_inv bf HBF)) by (apply bij_inv_bij; auto).
     assert (bij_ren (bij_inv bf' HBF')) by (apply bij_inv_bij; auto).
     assert (bij_ren (bij_inv br HBR)) by (apply bij_inv_bij; auto).
@@ -1604,7 +1438,7 @@ Proof.
       apply wf_bij_app; auto.
       apply wf_bij_app; auto.
   - inversion H0; existT_eq; subst.
-    assert (wf_ren (bij_inv br HBR)) by (apply wf_bij_ren_inv; auto).
+    assert (wf_ren (bij_inv br HBR)) by (apply wf_bij_inv; auto).
     assert (bij_ren (bij_inv br HBR)) by (apply bij_inv_bij; auto).
     eapply wf_def; eauto.
     + apply HWR; auto.
@@ -1615,9 +1449,9 @@ Proof.
       rewrite (bij_inv_bij_inv_eq _ br HWR HBR X).
       reflexivity.
   - inversion H; existT_eq; subst.
-    assert (wf_ren (bij_inv br HBR)) by (apply wf_bij_ren_inv; auto).
+    assert (wf_ren (bij_inv br HBR)) by (apply wf_bij_inv; auto).
     assert (bij_ren (bij_inv br HBR)) by (apply bij_inv_bij; auto).
-    assert (wf_ren (bij_inv bf HBF)) by (apply wf_bij_ren_inv; auto).
+    assert (wf_ren (bij_inv bf HBF)) by (apply wf_bij_inv; auto).
     assert (bij_ren (bij_inv bf HBF)) by (apply bij_inv_bij; auto).
     specialize (@Proper_ren_compose _ n nat (bij_inv br HBR) H0). intros HP.
     rewrite HD.
@@ -1632,9 +1466,9 @@ Proof.
     reflexivity.
     reflexivity.
   - inversion H1; existT_eq; subst.
-    assert (wf_ren (bij_inv br HBR)) by (apply wf_bij_ren_inv; auto).
+    assert (wf_ren (bij_inv br HBR)) by (apply wf_bij_inv; auto).
     assert (bij_ren (bij_inv br HBR)) by (apply bij_inv_bij; auto).
-    assert (wf_ren (bij_inv bf HBF)) by (apply wf_bij_ren_inv; auto).
+    assert (wf_ren (bij_inv bf HBF)) by (apply wf_bij_inv; auto).
     assert (bij_ren (bij_inv bf HBF)) by (apply bij_inv_bij; auto).
     specialize (@Proper_ren_compose _ n nat (bij_inv br HBR) H2). intros HP.
     rewrite HD.
@@ -1646,9 +1480,9 @@ Proof.
     reflexivity.
     reflexivity.
   - inversion H; existT_eq; subst.
-    assert (wf_ren (bij_inv br HBR)) by (apply wf_bij_ren_inv; auto).
+    assert (wf_ren (bij_inv br HBR)) by (apply wf_bij_inv; auto).
     assert (bij_ren (bij_inv br HBR)) by (apply bij_inv_bij; auto).
-    assert (wf_ren (bij_inv bf HBF)) by (apply wf_bij_ren_inv; auto).
+    assert (wf_ren (bij_inv bf HBF)) by (apply wf_bij_inv; auto).
     assert (bij_ren (bij_inv bf HBF)) by (apply bij_inv_bij; auto).
     specialize (@Proper_ren_compose _ n nat (bij_inv br HBR) H0). intros HP.
     rewrite HD.
@@ -1660,9 +1494,9 @@ Proof.
     reflexivity.
     reflexivity.
   - inversion H; existT_eq; subst.
-    assert (wf_ren (bij_inv br HBR)) by (apply wf_bij_ren_inv; auto).
+    assert (wf_ren (bij_inv br HBR)) by (apply wf_bij_inv; auto).
     assert (bij_ren (bij_inv br HBR)) by (apply bij_inv_bij; auto).
-    assert (wf_ren (bij_inv bf HBF)) by (apply wf_bij_ren_inv; auto).
+    assert (wf_ren (bij_inv bf HBF)) by (apply wf_bij_inv; auto).
     assert (bij_ren (bij_inv bf HBF)) by (apply bij_inv_bij; auto).
     specialize (@Proper_ren_compose _ n nat (bij_inv br HBR) H0). intros HP.
     rewrite HD.
@@ -1679,9 +1513,9 @@ Proof.
     reflexivity.
     reflexivity.
   - inversion H; existT_eq; subst.
-    assert (wf_ren (bij_inv br HBR)) by (apply wf_bij_ren_inv; auto).
+    assert (wf_ren (bij_inv br HBR)) by (apply wf_bij_inv; auto).
     assert (bij_ren (bij_inv br HBR)) by (apply bij_inv_bij; auto).
-    assert (wf_ren (bij_inv bf HBF)) by (apply wf_bij_ren_inv; auto).
+    assert (wf_ren (bij_inv bf HBF)) by (apply wf_bij_inv; auto).
     assert (bij_ren (bij_inv bf HBF)) by (apply bij_inv_bij; auto).
     specialize (@Proper_ren_compose _ n nat (bij_inv br HBR) H0). intros HP.
     rewrite HD.
@@ -1695,9 +1529,9 @@ Proof.
     reflexivity.
     reflexivity.
   - inversion H0; existT_eq; subst.
-    assert (wf_ren (bij_inv br HBR)) by (apply wf_bij_ren_inv; auto).
+    assert (wf_ren (bij_inv br HBR)) by (apply wf_bij_inv; auto).
     assert (bij_ren (bij_inv br HBR)) by (apply bij_inv_bij; auto).
-    assert (wf_ren (bij_inv bf HBF)) by (apply wf_bij_ren_inv; auto).
+    assert (wf_ren (bij_inv bf HBF)) by (apply wf_bij_inv; auto).
     assert (bij_ren (bij_inv bf HBF)) by (apply bij_inv_bij; auto).
     specialize (@Proper_ren_compose _ n nat (bij_inv br HBR) H1). intros HP.
     rewrite HD.
