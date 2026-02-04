@@ -61,7 +61,7 @@ Definition fvar := nat.
      - emp          the empty tuple ()
      - [tup r1 r2]  a "tuple" (pair) of resources
      - [bng f]      the name of a function
-     - [lam t]      an lambda, which is a term parameterized by one resource
+     - [lam t]      an lambda, which is a term exactly one free resource
 
 
   (* SAZ: We could contemplate defining Rocq notations for terms. *) 
@@ -517,7 +517,7 @@ Inductive wf_term : forall (m n:nat), term -> Prop :=
     (UG : forall x, x < m -> (G x) = 1)
     (UD : forall x, x < n -> (D x) = 2 \/ (D x) = 0)
     (P : proc)
-    (WFP : wf_proc (m' + m) (n' + n) (G ⊗ (zero m')) (D ⊗ (flat_ctxt 1 n')) P),
+    (WFP : wf_proc (m + m') (n + n') (G ⊗ (zero m')) (D ⊗ (flat_ctxt 1 n')) P),
     wf_term m' n' (bag m n P)
 
 with wf_proc : forall (m n:nat), lctxt m -> lctxt n -> proc -> Prop :=
@@ -807,8 +807,6 @@ Proof.
   apply wf_tpo_ind; intros. 
   (* All cases are trivial *)
   all: constructor; auto.
-  (* Rocq needs help for Bag *)
-  - rewrite (Nat.add_comm m), (Nat.add_comm n); auto.
 Qed.  
 
 Lemma wf_ws_term : (forall m n t, wf_term m n t -> ws_term m n t).
@@ -1148,6 +1146,7 @@ Scheme peq_term_ind := Induction for peq_term Sort Prop
 Combined Scheme peq_tpo_ind from peq_term_ind, peq_proc_ind, peq_oper_ind.
 
 
+(* PEQ is transitive with the compositions of renamings *)
 Lemma peq_compose_tpo :
   (forall (m n:nat) (bf : ren m m) (br : ren n n) (t t' : term)
      (HT: peq_term m n bf br t t'),
@@ -1197,12 +1196,13 @@ Proof.
   (* Lam *)
   - econstructor.
     (* Introduce an identity renaming to compose with *)
-    rewrite <- (ren_compose_id_r _ _ (ren_id 1) (wf_bij_ren_id 1)).
+    rewrite <- (ren_compose_id_r (ren_id 1) wf_bij_ren_id).
     (* Terms are peq by IH *)
     apply H; auto using wf_bij_ren_id.
 Qed.
 
 
+(* PEQ is symmetric with the inverse renamings *)
 Lemma peq_inv_tpo :
   (forall (m n:nat) (bf : ren m m) (br : ren n n) (t t' : term)
      (HT: peq_term m n bf br t t'),
@@ -1248,7 +1248,7 @@ Proof.
     constructor; repeat try (apply WBF; auto); repeat try (apply WBR; auto); auto]. 
   (* Bag *)
   - apply peq_bag with (bf' := bij_inv bf' WBF') (br' := bij_inv br' WBR').
-    1, 2 : auto using bij_inv_wf_bij.
+    1, 2: auto using bij_inv_wf_bij.
     rewrite <- bij_inv_app with (HWB1 := WBF')(HWB2 := WBF).    
     rewrite <- bij_inv_app with (HWB1 := WBR')(HWB2 := WBR).
     apply H.
@@ -1259,9 +1259,7 @@ Proof.
 Qed.
 
 
-(* As defined, renaming by the identity isn't reflexive because it requires that
-   the variables mentioned are in scope.  Therefore peq defines a PER. It is
-   reflexive on "well scoped" terms.  *)
+(* PEQ is reflexive on "well scoped" terms using the appropriate identity renamings *)
 Lemma peq_id_refl_tpo :
   (forall m n (t : term),
       ws_term m n t ->
@@ -1292,6 +1290,8 @@ Proof.
     rewrite bij_app_id.
     apply H.
 Qed.
+
+
 
 (* We can existentially quantify over the renamings to get a "permutation"
    equivalence on syntax directly.  These relations are what actually formed
@@ -1408,144 +1408,57 @@ Lemma peq_wf_tpo :
               o2).
 Proof.
   apply wf_tpo_ind; intros.
+  (* All cases but Bag follow this structure: *)
+  all: try solve [
+    (* Invert on the PEQ judgement *)
+    match goal with
+    | [ H: context[peq_term] |- _ ] => inversion H; existT_eq; subst
+    | [ H: context[peq_proc] |- _ ] => inversion H; existT_eq; subst
+    | [ H: context[peq_oper] |- _ ] => inversion H; existT_eq; subst
+    end;
+
+    (* For convenience *)
+    remember (bij_inv_wf_bij _ WBR) as WBRI;
+    remember (bij_inv_wf_bij _ WBF) as WBFI;
+
+    (* Rewrites any known context structure *)
+    specialize (@Proper_ren_compose _ _ nat (bij_inv br WBR) WBRI); intros;
+    try rewrite HD;
+    specialize (@Proper_ren_compose _ _ nat (bij_inv bf WBF) WBFI); intros;
+    try rewrite HG;
+    
+    (* Does any context rewriting necessary for constructing WF *)
+    try (unfold zero; repeat rewrite ren_compose_flat_ctxt);
+    try (repeat rewrite ren_sum_compose);
+    try (repeat rewrite ren_one_compose with (HWB := WBRI); auto;
+      rewrite (bij_inv_bij_inv_eq _ WBR));
+    try (repeat rewrite ren_one_compose with (HWB := WBFI); auto;
+      rewrite (bij_inv_bij_inv_eq _ WBF));
+
+    (* The PEQ expression (t' p' o') is WF under the renamed contexts, 
+          with subexpressions WF by IH *)
+    econstructor; eauto;
+    try reflexivity;
+    try (apply WBR; auto);
+    try (apply WBF; auto);
+    (* Special case for proving Lambda's subterm WF*)
+    try (apply (H _ _ _ H6); auto using wf_bij_ren_id)
+  ].
   (* Bag *)
   - inversion H0; existT_eq; subst.
-    assert (wf_ren (bij_inv bf HBF)) by apply wf_bij_inv.
-    assert (wf_ren (bij_inv br HBR)) by apply wf_bij_inv.    
-    assert (wf_ren (bij_inv bf' HBF')) by apply wf_bij_inv.
-    assert (wf_ren (bij_inv br' HBR')) by apply wf_bij_inv.
-    assert (bij_ren (bij_inv bf HBF)) by (apply bij_inv_bij; auto).
-    assert (bij_ren (bij_inv bf' HBF')) by (apply bij_inv_bij; auto).
-    assert (bij_ren (bij_inv br HBR)) by (apply bij_inv_bij; auto).
-    assert (bij_ren (bij_inv br' HBR')) by (apply bij_inv_bij; auto).
-    apply wf_bag with (G':=(ren_compose (bij_inv bf' HBF') G'))
-                      (D':=(ren_compose (bij_inv br' HBR') D')).
-    + intros.
-      destruct HBF' as [bf'_inv [HBI HEQ]].
-      simpl. unfold ren_compose, compose.
-      assert ((bf'_inv x) < m'). { apply HBI. assumption. }
-      apply UG'; auto.
-    + intros.
-      destruct HBR' as [br'_inv [HBR' HEQ]].
-      simpl. unfold ren_compose, compose.
-      assert ((br'_inv x) < n'). { apply HBR'. assumption. }
-      apply UD'; auto.
-    + rewrite ren_compose_app; auto.
-      rewrite ren_compose_app; auto.
-      rewrite bij_app_inv with (WF1 := WFF')(WF2 := HWF).
-      rewrite bij_app_inv with (WF1 := WFR')(WF2 := HWR).
+    apply wf_bag with (G:=(ren_compose (bij_inv bf' WBF') G))
+                      (D:=(ren_compose (bij_inv br' WBR') D)).
+    (* Composing the renamings doesn't change resource usage *)
+    + apply (compose_wf_bij_ren_ctxt_preservation 
+                (fun x => x = 1) _ _); auto using bij_inv_wf.
+    + apply (compose_wf_bij_ren_ctxt_preservation 
+                (fun x => x = 2 \/ x = 0) _ _); auto using bij_inv_wf.
+    (* By IH after many renaming/context rewritings *)
+    + unfold zero; rewrite <- (flat_ctxt_ren_compose_identity 0 (bij_inv bf WBF)).
+      rewrite <- (flat_ctxt_ren_compose_identity 1 (bij_inv br WBR)).
+      repeat rewrite ren_compose_app; auto using bij_inv_wf_bij.
+      repeat rewrite bij_app_inv.
       apply H; auto.
-      apply wf_bij_app; auto.
-      apply wf_bij_app; auto.
-  - inversion H0; existT_eq; subst.
-    assert (wf_ren (bij_inv br HBR)) by (apply wf_bij_inv; auto).
-    assert (bij_ren (bij_inv br HBR)) by (apply bij_inv_bij; auto).
-    eapply wf_def; eauto.
-    + apply HWR; auto.
-    + specialize (@Proper_ren_compose _ n nat (bij_inv br HBR) H1). intros HP.
-      rewrite HD.
-      rewrite ren_sum_compose.
-      rewrite ren_one_compose with (H:=X); auto.
-      rewrite (bij_inv_bij_inv_eq _ br HWR HBR X).
-      reflexivity.
-  - inversion H; existT_eq; subst.
-    assert (wf_ren (bij_inv br HBR)) by (apply wf_bij_inv; auto).
-    assert (bij_ren (bij_inv br HBR)) by (apply bij_inv_bij; auto).
-    assert (wf_ren (bij_inv bf HBF)) by (apply wf_bij_inv; auto).
-    assert (bij_ren (bij_inv bf HBF)) by (apply bij_inv_bij; auto).
-    specialize (@Proper_ren_compose _ n nat (bij_inv br HBR) H0). intros HP.
-    rewrite HD.
-    specialize (@Proper_ren_compose _ m nat (bij_inv bf HBF) H1). intros HPF.
-    rewrite HG.
-    rewrite ren_one_compose with (H:=X); auto.
-    rewrite (bij_inv_bij_inv_eq _ br HWR HBR X).
-    rewrite ren_compose_zero.
-    constructor; auto.
-    apply HWF; auto.
-    apply HWR; auto.
-    reflexivity.
-    reflexivity.
-  - inversion H1; existT_eq; subst.
-    assert (wf_ren (bij_inv br HBR)) by (apply wf_bij_inv; auto).
-    assert (bij_ren (bij_inv br HBR)) by (apply bij_inv_bij; auto).
-    assert (wf_ren (bij_inv bf HBF)) by (apply wf_bij_inv; auto).
-    assert (bij_ren (bij_inv bf HBF)) by (apply bij_inv_bij; auto).
-    specialize (@Proper_ren_compose _ n nat (bij_inv br HBR) H2). intros HP.
-    rewrite HD.
-    specialize (@Proper_ren_compose _ m nat (bij_inv bf HBF) H3). intros HPF.
-    rewrite HG.
-    rewrite ren_sum_compose.
-    rewrite ren_sum_compose.
-    econstructor; eauto.
-    reflexivity.
-    reflexivity.
-  - inversion H; existT_eq; subst.
-    assert (wf_ren (bij_inv br HBR)) by (apply wf_bij_inv; auto).
-    assert (bij_ren (bij_inv br HBR)) by (apply bij_inv_bij; auto).
-    assert (wf_ren (bij_inv bf HBF)) by (apply wf_bij_inv; auto).
-    assert (bij_ren (bij_inv bf HBF)) by (apply bij_inv_bij; auto).
-    specialize (@Proper_ren_compose _ n nat (bij_inv br HBR) H0). intros HP.
-    rewrite HD.
-    specialize (@Proper_ren_compose _ m nat (bij_inv bf HBF) H1). intros HPF.
-    rewrite HG.
-    rewrite ren_compose_zero.
-    rewrite ren_compose_zero.
-    constructor.
-    reflexivity.
-    reflexivity.
-  - inversion H; existT_eq; subst.
-    assert (wf_ren (bij_inv br HBR)) by (apply wf_bij_inv; auto).
-    assert (bij_ren (bij_inv br HBR)) by (apply bij_inv_bij; auto).
-    assert (wf_ren (bij_inv bf HBF)) by (apply wf_bij_inv; auto).
-    assert (bij_ren (bij_inv bf HBF)) by (apply bij_inv_bij; auto).
-    specialize (@Proper_ren_compose _ n nat (bij_inv br HBR) H0). intros HP.
-    rewrite HD.
-    specialize (@Proper_ren_compose _ m nat (bij_inv bf HBF) H1). intros HPF.
-    rewrite HG.
-    rewrite ren_sum_compose.
-    rewrite ren_compose_zero.
-    rewrite ren_one_compose with (H := X); auto.
-    rewrite ren_one_compose with (H := X); auto.
-    rewrite (bij_inv_bij_inv_eq _ br HWR HBR X).
-    eapply wf_tup.
-    apply HWR; auto.
-    apply HWR; auto.
-    reflexivity.
-    reflexivity.
-  - inversion H; existT_eq; subst.
-    assert (wf_ren (bij_inv br HBR)) by (apply wf_bij_inv; auto).
-    assert (bij_ren (bij_inv br HBR)) by (apply bij_inv_bij; auto).
-    assert (wf_ren (bij_inv bf HBF)) by (apply wf_bij_inv; auto).
-    assert (bij_ren (bij_inv bf HBF)) by (apply bij_inv_bij; auto).
-    specialize (@Proper_ren_compose _ n nat (bij_inv br HBR) H0). intros HP.
-    rewrite HD.
-    specialize (@Proper_ren_compose _ m nat (bij_inv bf HBF) H1). intros HPF.
-    rewrite HG.
-    rewrite ren_one_compose with (H := X0); auto.
-    rewrite (bij_inv_bij_inv_eq _ bf HWF HBF X0).
-    rewrite ren_compose_zero.
-    constructor.
-    apply HWF; auto.
-    reflexivity.
-    reflexivity.
-  - inversion H0; existT_eq; subst.
-    assert (wf_ren (bij_inv br HBR)) by (apply wf_bij_inv; auto).
-    assert (bij_ren (bij_inv br HBR)) by (apply bij_inv_bij; auto).
-    assert (wf_ren (bij_inv bf HBF)) by (apply wf_bij_inv; auto).
-    assert (bij_ren (bij_inv bf HBF)) by (apply bij_inv_bij; auto).
-    specialize (@Proper_ren_compose _ n nat (bij_inv br HBR) H1). intros HP.
-    rewrite HD.
-    specialize (@Proper_ren_compose _ m nat (bij_inv bf HBF) H2). intros HPF.
-    rewrite HG.    
-    rewrite ren_compose_zero.
-    rewrite ren_compose_zero.
-    constructor; auto.
-    reflexivity.
-    reflexivity.
-    specialize (H t' bf _ H6 HWF HBF (wf_ren_id 1) (bij_ren_id 1)).
-    rewrite ren_compose_zero in H.
-    simpl in H.
-    setoid_rewrite (ren_delta_compose _ (ren_id 1) 0 1 (wf_ren_id 1) (bij_ren_id 1)) in H; auto.
 Qed.    
 
 
@@ -1670,10 +1583,10 @@ Definition weaken_f m m' m'' (P : proc) : proc :=
 
 
 
-(* Evaluation Contexts --------------------------------------------------- *)
+(* Evaluation Contexts (ECs) --------------------------------------------------- *)
 
 Inductive EC_term :=
-| Ebag (m n:nat) (EP:EC_proc)   (* nu. {f1...fm} {r1..rn} EP *)
+| Ebag (m n:nat) (EP : EC_proc)   (* nu. {f1...fm} {r1..rn} EP *)
 
 with EC_proc :=
 | Ehol
@@ -1683,6 +1596,8 @@ with EC_proc :=
 
 Reserved Notation "Et <=[ P ]" (at level 55).
 Reserved Notation "EP <=[ P ]p" (at level 55).
+Reserved Notation "Et <=<[ EP ]" (at level 55).
+Reserved Notation "EP <=<[ EP' ]p" (at level 55).
 
 (* Fill an evaluation context with a process *)
 Fixpoint fill_EC_term (Et : EC_term) (P : proc) : term :=
@@ -1697,11 +1612,203 @@ with fill_EC_proc (EP : EC_proc) (P : proc) : proc :=
   | Epar EP P' => par (EP <=[ P ]p) P' 
   end
   
-  where "Et <=[ P ]" := (fill_EC_term Et P)
-  and   "EP <=[ P ]p" := (fill_EC_proc EP P).
+where "Et <=[ P ]" := (fill_EC_term Et P)
+and   "EP <=[ P ]p" := (fill_EC_proc EP P).
+
+(* Fill an evaluation context with an EC process *)
+Fixpoint EC_fill_EC_term (Et : EC_term) (EP : EC_proc) : EC_term :=
+  match Et with
+  | Ebag m n EP' => Ebag m n (EP' <=<[ EP ]p)
+  end
+
+with EC_fill_EC_proc (EP : EC_proc) (EP' : EC_proc) : EC_proc :=
+  match EP with
+  | Ehol => EP'
+  | Edeflam r Et => Edeflam r (Et <=<[ EP' ])
+  | Epar EP'' P => Epar (EP'' <=<[ EP' ]p) P 
+  end
+  
+where "Et <=<[ EP ]" := (EC_fill_EC_term Et EP)
+and   "EP <=<[ EP' ]p" := (EC_fill_EC_proc EP EP').
 
 
 
+(* Given an EC, pops the top scope from the next scope containing the hole
+      (if different), returning a pair whose first element is the top scope
+      and second element is the EC process containing the next scope.
+    1) If the hole is at the top scope, returns (EC, Ehol)
+    2) If the hole is under a lambda, returns (EC_top, EC_lam) where:
+        - EC_top is the EC with the lamdef replaced with a hole
+        - EC_lam is the lamdef removed from the EC
+
+  If this function takes EC and returns (EC_top, EC_next),
+    1) Filling EC_top with EC_next will give EC.
+    2) EC_next is either Ehol or Edeflam
+    3) If EC_next is Ehol, then EC_top is EC *)
+
+Fixpoint pop_top_scope_to_hole_proc (EP : EC_proc) : EC_proc * EC_proc :=
+  match EP with
+  | Ehol => (Ehol, Ehol)    (* Hole is at the top scope *)
+  | Epar EP' P => match pop_top_scope_to_hole_proc EP' with
+                  | (EP1, EP2) => (Epar EP1 P, EP2)   (* Recurse *)
+                  end
+  | Edeflam _ _ => (Ehol, EP)    (* Split top and next scope *)
+  end.
+
+Definition pop_top_scope_to_hole (Et : EC_term) : EC_term * EC_proc :=
+  match Et with
+  | Ebag m n EP => match pop_top_scope_to_hole_proc EP with
+                   | (EP1, EP2) => (Ebag m n EP1, EP2)   (* Recurse *)
+                   end
+  end.
+
+Definition lam_with_hole Et :=
+  match pop_top_scope_to_hole Et with (_, EP) => EP end.
+Definition top_scope_to_hole Et :=
+  match pop_top_scope_to_hole Et with (Et', _) => Et' end.
+
+
+
+
+(* Write fixpoint locally?
+   let  pop_top_scope_to_hole := fix pop_top_scope_to_hole (Et : EC_term) : EC_term * EC_proc :=
+  match Et with 
+  | Ebag m n EP => match pop_top_scope_to_hole_proc EP with
+                   | (EP1, EP2) => (Ebag m n EP1, EP2)   (* Recurse *)
+                   end
+  end.*)
+
+
+
+(* Replace pop_top_scope_to_hole Et_cur with a new argument, make second function? *)
+
+Fixpoint split_hole_scope_builder (r : rvar) (Et_acc Et_cur : EC_term) : EC_term * EC_proc :=
+  match pop_top_scope_to_hole Et_cur with
+  | (_, Ehol) => (Et_acc, Edeflam r Et_cur)
+  | (Et_next, Edeflam r' Et_rest) => 
+              split_hole_scope_builder r'
+                (Et_acc <=<[ Edeflam r Et_next ]) Et_rest
+  | _ => (Ebag 0 0 Ehol, Ehol) (* Cannot reach here *)
+  end.
+
+Fixpoint split_hole_scope (Et : EC_term) : EC_term * EC_proc :=
+  match pop_top_scope_to_hole Et with
+  | (_, Ehol) => (Et, Ehol)
+  | (Et_acc, Edeflam r Et_cur) => split_hole_scope_builder r Et_acc Et_cur
+  | _ => (Ebag 0 0 Ehol, Ehol) (* Cannot reach here *)
+  end.
+
+ 
+
+
+
+
+
+
+Fixpoint split_hole_scope_proc (EP_acc EP_cur : EC_proc) : EC_proc * EC_proc :=
+  match pop_top_scope_to_hole_proc EP_cur with
+  | (EP', Ehol) => (EP', Ehol)    (* EP = EP' from invariant *)
+  | (EP', Edeflam r (Ebag m n EPL)) => 
+      match split_hole_scope_proc EPL with
+      | (EPL', Ehol) => (EP', EPL')    (* EPL = EPL' from invariant *)
+      | (EPL', EP_base) => (EP' <=<[ EPL' ]p, EP_base)    (* EP_base is Edeflam from invariant *)
+      end
+  | _ => (Ehol, Ehol) (* Never reach here from invariant *)
+  end.
+
+
+
+
+(* *)
+Fixpoint split_hole_scope_proc (EP : EC_proc) : EC_proc * EC_proc :=
+  match pop_top_scope_to_hole_proc EP with
+  | (EP', Ehol) => (EP', Ehol)    (* EP = EP' from invariant *)
+  | (EP', Edeflam r (Ebag m n EPL)) => 
+      match split_hole_scope_proc EPL with
+      | (EPL', Ehol) => (EP', EPL')    (* EPL = EPL' from invariant *)
+      | (EPL', EP_base) => (EP' <=<[ EPL' ]p, EP_base)    (* EP_base is Edeflam from invariant *)
+      end
+  | (_, _) => (Ehol, Ehol) (* Never reach here from invariant *)
+  end.
+
+Fixpoint split_hole_scope (Et : EC_term) : EC_term * EC_proc :=
+  match pop_top_scope_to_hole Et with
+  | (Et', Ehol) => Et'    (* Et = Et' from invariant *)
+  | (Et', Edeflam r EtL) => 
+  end.
+
+
+(* Splits an EC between the scope of the hole and the rest of the EC.*)
+Fixpoint apply_at_hole_scope_proc {X} 
+    (f : EC_term -> X) (cur_scope : EC_term) (EP : EC_proc) : X :=
+  match EP with
+  | Ehol => f cur_scope
+  | Epar EP' _ => apply_at_hole_scope_proc f cur_scope EP'
+  | Edeflam _ Et => match Et with
+                    | Ebag _ _ EP' => apply_at_hole_scope_proc f Et EP'
+                    end
+  end.
+
+Definition apply_at_hole_scope {X} (f : EC_term -> X) (Et : EC_term) : X :=
+  match Et with
+  | Ebag _ _ EP => apply_at_hole_scope_proc f Et EP
+  end.
+
+
+(* Splits an EC between the scope of the hole and the rest of the EC.*)
+Fixpoint mutate_hole_scope_proc {X} 
+    (f : EC_term -> EC_term) (cur_scope : EC_term) (EP : EC_proc) : EC_term :=
+  match EP with
+  | Ehol => f cur_scope
+  | Epar EP' _ => mutate_hole_scope_proc f cur_scope EP'
+  | Edeflam _ Et => match Et with
+                    | Ebag _ _ EP' => apply_at_hole_scope_proc f Et EP'
+                    end
+  end.
+
+Definition mutate_hole_scope {X} (f : EC_term -> X) (Et : EC_term) : X :=
+  match Et with
+  | Ebag _ _ EP => mutate_hole_scope_proc f Et EP
+  end.
+
+
+
+
+
+
+  
+
+(* Gives the number of bound variables (function or resource)
+      at the scope of the hole *)
+Fixpoint bound_fvars_at_hole_term m_acc (Et : EC_term) : nat :=
+  match Et with
+  | Ebag m _ EP => (bound_fvars_at_hole_proc (m_acc + m) EP)
+  end
+
+with bound_fvars_at_hole_proc m_acc (EP : EC_proc) : nat :=
+  match EP with
+  | Ehol =>  m_acc
+  | Edeflam _ Et => (bound_fvars_at_hole_term m_acc Et)
+  | Epar EP _ => (bound_fvars_at_hole_proc m_acc EP)
+  end.
+  
+Fixpoint bound_rvars_at_hole_term n_acc (Et : EC_term) : nat :=
+  match Et with
+  | Ebag _ n EP => n + (bound_rvars_at_hole_proc (n_acc + n) EP)
+  end
+
+with bound_rvars_at_hole_proc n_acc (EP : EC_proc) : nat :=
+  match EP with
+  | Ehol => n_acc
+  | Edeflam _ Et => (bound_rvars_at_hole_term 1 Et)
+  | Epar EP _ => (bound_rvars_at_hole_proc n_acc EP)
+  end.
+
+Definition bound_fvars_at_hole := bound_fvars_at_hole_term 0.
+Definition bound_rvars_at_hole := bound_rvars_at_hole_term 0.
+
+
+(* Define renamings on ECs *)
 Fixpoint rename_rvar_EC_proc {n n'} (v : ren n n') (EP : EC_proc) :=
   match EP with
   | Ehol => Ehol
@@ -1718,18 +1825,6 @@ Definition rename_rvar_EC_term {n n'} (v : ren n n') (Et : EC_term) :=
 
 (* Operational Semantics --------------------------------------------------- *)
                   
-
-
-
-Definition freshen_body m m' m'' (n:nat) n' n'' (r':nat) (Q:proc) :=
-  let Q0 := rename_fvar_proc (ren_commute_str 0 m'' m' m) Q in
-  let Q1 := rename_rvar_proc (weaken_ren (n'' + 1) 0 n') Q0 in
-  let Q2 := @rename_rvar_proc (n' + (n'' + 1) + n) (n' + (n'' + 1) + n) 
-                (rename_var (n' + n'') r') Q1 in
-  Q2.
-
-  
-
 (* Gives a "collapsed" renaming that only renames r1 to r2 *)
 Definition rename_if_neq n (r1 r2 : nat) : ren n n :=
   if Nat.eq_dec r1 r2 then
@@ -1762,53 +1857,51 @@ Definition cut_renaming n (r1 r2 r1' r2':nat) : ren n n :=
     @ren_compose n n nat (rename_var r1 r1') (rename_var r2 r2').
 
 
+(* FRAN: This is wrong *)
+Definition tuple_cut Et r1 r2 r1' r2' := 
+  rename_rvar_EC_term (cut_renaming (bound_rvars_at_hole Et) r1 r2 r1' r2') Et.
+
+Definition freshen_body m n n' n'' (r':nat) (P:proc) m' m'' :=
+  let Q0 := rename_fvar_proc (ren_commute_str 0 m'' m' m) P in
+  let Q1 := rename_rvar_proc (weaken_ren (n'' + 1) 0 n') Q0 in
+  let Q2 := @rename_rvar_proc (n' + (n'' + 1) + n) (n' + (n'' + 1) + n) 
+                (rename_var (n' + n'') r') Q1 in
+  Q2.
 
               
  Inductive prim_step : term -> term -> Prop :=
-| step_par_nul :    (* Et <=[ P | nul ] --> Et <=[ P ] *)
+| step_par_nul :    (*  Et <=[ P | nul ]  -->  Et <=[ P ]  *)
   forall Et P,
     prim_step
       (Et <=[ par P nul ])
       (Et <=[ P ])
 
-| step_emp_cut :    (* Et <=[ r <- () | r <- () ] --> Et <=[ nul ] *)
+| step_emp_cut :    (*  Et <=[ r <- () | r <- () ]  -->  Et <=[ nul ]  *)
   forall Et r,
     prim_step
       (Et <=[ par (def r emp) (def r emp) ])
       (Et <=[ nul ])
 
-      (* FRAN Need to create function for finding context of hole,
-        and use that to find the variable depth for the cut *)
-| step_tup_cut :    (* Et <=[ r <- (r1, r2) | r <- (r1', r2') ] --> rename(ET) <=[ nul ] *)
-  forall Et r r1 r2 r1' r2' n,
+| step_tup_cut :    (*  Et <=[ r <- (r1, r2) | r <- (r1', r2') ]  *)
+  forall Et r r1 r2 r1' r2',    (*  -->  ET{r1=r1',r2=r2'} <=[ nul ]  *)
     prim_step
       (Et <=[ par (def r (tup r1 r2)) (def r (tup r1' r2')) ])
-      ((rename_rvar_EC_term (cut_renaming (n' + n) r1 r2 r1' r2') Et) <=[ nul ])
+      ((tuple_cut Et r1 r2 r1' r2') <=[ nul ])
       
-| step_app :
-  forall Et Et' m m' m'' n n' n'' r r' f P Q,
+| step_app :    (*  Et <=[ r <- lam r''. (bag m n P) | r' <- ?f | EP <=[ f r2 ] ]  *)
+  forall Et EP m n f r r' P,    (*  -->  Et <=[ '' | '' | EP <=[ freshen(P){r'=r''} ] ]  *)
     (* (1) scope_extrude -> ren_commute_str
        (2) weaken_f after step ? *)
-    let Q' := (freshen_body m m' m'' n n' n'' r' Q) in
+    let Q' := (freshen_body m n r' P) in
     prim_step
     (Et <=[ (par (par
-                (def r (lam (bag m'' n'' Q)))
+                (def r (lam (bag m n P)))
                 (def r (bng f)))
-                Et' <=[ app f r' ]) ]) 
-    (bag m' n'
-       (par
-          (par
-                (def r (lam (bag m'' n'' Q)))
+                EP <=[ app f r' ]) ])
+    (Et <=[ (par (par
+                (def r (lam (bag m n P)))
                 (def r (bng f)))
-          (app f r'))) 
-    (bag (m' + m'') (n' + (n'' + 1))
-       (par
-          (weaken_f m m' m''
-          (par P
-             (par
-                (def r (lam (bag m'' n'' Q)))
-                (def r (bng f)))))
-              Q')).
+                EP <=[ app f r' ]) ]).
 
 
  Lemma wf_prim_step :
