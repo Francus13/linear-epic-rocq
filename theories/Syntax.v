@@ -1679,10 +1679,10 @@ Definition top_scope_to_hole Et :=
   end.*)
 
 
+  
 
-(* Replace pop_top_scope_to_hole Et_cur with a new argument, make second function? *)
 
-Fixpoint split_hole_scope_builder (r : rvar) (Et_acc Et_cur : EC_term) : EC_term * EC_proc :=
+Program Fixpoint split_hole_scope_builder (r : rvar) (Et_acc Et_cur : EC_term) : EC_term * EC_proc :=
   match pop_top_scope_to_hole Et_cur with
   | (_, Ehol) => (Et_acc, Edeflam r Et_cur)
   | (Et_next, Edeflam r' Et_rest) => 
@@ -1690,6 +1690,8 @@ Fixpoint split_hole_scope_builder (r : rvar) (Et_acc Et_cur : EC_term) : EC_term
                 (Et_acc <=<[ Edeflam r Et_next ]) Et_rest
   | _ => (Ebag 0 0 Ehol, Ehol) (* Cannot reach here *)
   end.
+Next Obligation.
+
 
 Fixpoint split_hole_scope (Et : EC_term) : EC_term * EC_proc :=
   match pop_top_scope_to_hole Et with
