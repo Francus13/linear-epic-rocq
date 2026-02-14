@@ -86,19 +86,16 @@ with oper :=
 Scheme term_ind_m := Induction for term Sort Prop
   with proc_ind_m := Induction for proc Sort Prop
   with oper_ind_m := Induction for oper Sort Prop.
-
 Combined Scheme tpo_ind from term_ind_m, proc_ind_m, oper_ind_m.
 
 Scheme term_rect_m := Induction for term Sort Type
   with proc_rect_m := Induction for proc Sort Type
   with oper_rect_m := Induction for oper Sort Type.
-
 Combined Scheme tpo_rect from term_rect_m, proc_rect_m, oper_rect_m.
 
 Scheme term_rec_m := Induction for term Sort Set
   with proc_rec_m := Induction for proc Sort Set
   with oper_rec_m := Induction for oper Sort Set.
-
 Combined Scheme tpo_rec from term_rec_m, proc_rec_m, oper_rec_m.
 
 
@@ -273,22 +270,11 @@ Proof.
 Qed.
 
 #[global] Instance Reflexive_seq_term : Reflexive (seq_term).
-Proof.
-  unfold Reflexive.
-  apply tpo_seq_reflexive.
-Qed.
-
+Proof. unfold Reflexive. apply tpo_seq_reflexive. Qed.
 #[global] Instance Reflexive_seq_proc : Reflexive (seq_proc).
-Proof.
-  unfold Reflexive.
-  apply tpo_seq_reflexive.
-Qed.
-
+Proof. unfold Reflexive. apply tpo_seq_reflexive. Qed.
 #[global] Instance Reflexive_seq_oper : Reflexive (seq_oper).
-Proof.
-  unfold Reflexive.
-  apply tpo_seq_reflexive.
-Qed.
+Proof. unfold Reflexive. apply tpo_seq_reflexive. Qed.
 
 Lemma tpo_seq_transitive :
   (forall (t1 t2 t3 : term), t1 ≈t t2 -> t2 ≈t t3 -> t1 ≈t t3) /\
@@ -312,22 +298,11 @@ Proof.
 Qed.
 
 #[global] Instance Transitive_seq_term : Transitive (seq_term).
-Proof.
-  unfold Transitive.
-  apply tpo_seq_transitive.
-Qed.
-
+Proof. unfold Transitive. apply tpo_seq_transitive. Qed.
 #[global] Instance Transitive_seq_proc : Transitive (seq_proc).
-Proof.
-  unfold Transitive.
-  apply tpo_seq_transitive.
-Qed.
-
+Proof. unfold Transitive. apply tpo_seq_transitive. Qed.
 #[global] Instance Transitive_seq_oper : Transitive (seq_oper).
-Proof.
-  unfold Transitive.
-  apply tpo_seq_transitive.
-Qed.
+Proof. unfold Transitive. apply tpo_seq_transitive. Qed.
 
 Lemma tpo_seq_symmetric :
   (forall (t1 t2 : term), t1 ≈t t2 -> t2 ≈t t1) /\
@@ -346,22 +321,11 @@ Proof.
 Qed.
 
 #[global] Instance Symmetric_seq_term : Symmetric (seq_term).
-Proof.
-  unfold Symmetric.
-  apply tpo_seq_symmetric.
-Qed.
-
+Proof. unfold Symmetric. apply tpo_seq_symmetric. Qed.
 #[global] Instance Symmetric_seq_proc : Symmetric (seq_proc).
-Proof.
-  unfold Symmetric.
-  apply tpo_seq_symmetric.
-Qed.
-
+Proof. unfold Symmetric. apply tpo_seq_symmetric. Qed.
 #[global] Instance Symmetric_seq_oper : Symmetric (seq_oper).
-Proof.
-  unfold Symmetric.
-  apply tpo_seq_symmetric.
-Qed.
+Proof. unfold Symmetric. apply tpo_seq_symmetric. Qed.
 
 
 
@@ -1594,6 +1558,19 @@ with EC_proc :=
 | Epar (EP : EC_proc) (P : proc). (* EP | P *)
 (* May need left and right Epars *)
 
+
+Scheme EC_term_ind_m := Induction for EC_term Sort Prop
+  with EC_proc_ind_m := Induction for EC_proc Sort Prop.
+Combined Scheme EC_tp_ind from EC_term_ind_m, EC_proc_ind_m.
+
+Scheme EC_term_rect_m := Induction for EC_term Sort Type
+  with EC_proc_rect_m := Induction for EC_proc Sort Type.
+Combined Scheme EC_tp_rect from EC_term_rect_m, EC_proc_rect_m.
+
+Scheme EC_term_rec_m := Induction for EC_term Sort Set
+  with EC_proc_rec_m := Induction for EC_proc Sort Set.
+Combined Scheme EC_tp_rec from EC_term_rec_m, EC_proc_rec_m.
+
 Reserved Notation "Et <=[ P ]" (at level 55).
 Reserved Notation "EP <=[ P ]p" (at level 55).
 Reserved Notation "Et <=<[ EP ]" (at level 55).
@@ -1633,6 +1610,49 @@ and   "EP <=<[ EP' ]p" := (EC_fill_EC_proc EP EP').
 
 
 
+(* Gives the number of lambda bindings encountered when traversing 
+      to the hole (i.e. how many scopes deep the hole is) *)
+Fixpoint hole_depth (Et : EC_term) : nat :=
+  match Et with
+  | Ebag _ _ EP => hole_depth_proc EP
+  end
+
+with hole_depth_proc (EP : EC_proc) : nat :=
+  match EP with
+  | Ehol => 0
+  | Edeflam _ Et => 1 + hole_depth Et
+  | Epar EP' _ => hole_depth_proc EP'
+  end.
+
+(* States the hole_depth of an EC is less than another *)
+Definition hole_depth_lt (Et1 Et2 : EC_term) := 
+  lt (hole_depth Et1) (hole_depth Et2).
+
+(* Every EC is accessible with hole_depth_lt.
+   Used to prove well-foundedness of split_hole_scope. *)
+Lemma hole_depth_lt_wf : 
+  (forall (Et : EC_term), Acc hole_depth_lt Et) /\
+  (forall (EP : EC_proc) m n, Acc hole_depth_lt (Ebag m n EP)).
+Proof. 
+  apply EC_tp_ind; intros.
+  (* Ebag is immediate by IH *)
+  - apply H.
+  (* Ehol has depth 0 and is the base case *)
+  - constructor; intros. unfold hole_depth_lt in H; simpl in H. lia.
+  (* Elam adds to depth *)
+  - constructor; intros.
+    (* Case on whether we need a new Acc layer before IH *)
+    destruct (Nat.eqb_spec (hole_depth y) (hole_depth Et)).
+    + constructor; intros. apply (Acc_inv H). 
+      unfold hole_depth_lt in *. rewrite <- e. apply H1.
+    + apply (Acc_inv H). unfold hole_depth_lt in *. simpl in H0. lia.
+  (* Epar follows from IH *)
+  - constructor; intros. specialize H with m n. apply (Acc_inv H).
+    unfold hole_depth_lt in *; auto.
+Qed.
+
+
+
 (* Given an EC, pops the top scope from the next scope containing the hole
       (if different), returning a pair whose first element is the top scope
       and second element is the EC process containing the next scope.
@@ -1646,131 +1666,92 @@ and   "EP <=<[ EP' ]p" := (EC_fill_EC_proc EP EP').
     2) EC_next is either Ehol or Edeflam
     3) If EC_next is Ehol, then EC_top is EC *)
 
-Fixpoint pop_top_scope_to_hole_proc (EP : EC_proc) : EC_proc * EC_proc :=
+Fixpoint pop_EC_scope_proc (EP : EC_proc) : EC_proc * EC_proc :=
   match EP with
   | Ehol => (Ehol, Ehol)    (* Hole is at the top scope *)
-  | Epar EP' P => match pop_top_scope_to_hole_proc EP' with
+  | Epar EP' P => match pop_EC_scope_proc EP' with
                   | (EP1, EP2) => (Epar EP1 P, EP2)   (* Recurse *)
                   end
   | Edeflam _ _ => (Ehol, EP)    (* Split top and next scope *)
   end.
 
-Definition pop_top_scope_to_hole (Et : EC_term) : EC_term * EC_proc :=
+Definition pop_EC_scope (Et : EC_term) : EC_term * EC_proc :=
   match Et with
-  | Ebag m n EP => match pop_top_scope_to_hole_proc EP with
+  | Ebag m n EP => match pop_EC_scope_proc EP with
                    | (EP1, EP2) => (Ebag m n EP1, EP2)   (* Recurse *)
                    end
   end.
 
-Definition lam_with_hole Et :=
-  match pop_top_scope_to_hole Et with (_, EP) => EP end.
-Definition top_scope_to_hole Et :=
-  match pop_top_scope_to_hole Et with (Et', _) => Et' end.
+Definition top_scope Et := match pop_EC_scope Et with (Et', _) => Et' end.
+Definition next_scope_to_hole Et := match pop_EC_scope Et with (_, EP) => EP end.
+
+
+(* pop_EC_scope reduces hole_depth *)
+Lemma pop_EC_scope_reduces_hole_depth : forall Et Et' r, 
+    next_scope_to_hole Et = Edeflam r Et' -> hole_depth_lt Et' Et.
+Proof.
+  intros; unfold hole_depth_lt. destruct Et.
+  induction EP; intros; simpl in *.
+  - discriminate.
+  - injection H; intros. rewrite H0. apply Nat.lt_succ_diag_r.
+  - apply IHEP. rewrite <- H. unfold next_scope_to_hole; simpl.
+    destruct (pop_EC_scope_proc EP). reflexivity.   (* FRAN: Why did this work? *)
+Qed.
 
 
 
+(* FRAN: Is there a way to tell the pattern matching system that
+    the second element of pop_EC_scope can never be Epar? *)
 
-(* Write fixpoint locally?
-   let  pop_top_scope_to_hole := fix pop_top_scope_to_hole (Et : EC_term) : EC_term * EC_proc :=
-  match Et with 
-  | Ebag m n EP => match pop_top_scope_to_hole_proc EP with
-                   | (EP1, EP2) => (Ebag m n EP1, EP2)   (* Recurse *)
-                   end
-  end.*)
-
-
-  
-
-
-Program Fixpoint split_hole_scope_builder (r : rvar) (Et_acc Et_cur : EC_term) : EC_term * EC_proc :=
-  match pop_top_scope_to_hole Et_cur with
+(* HELPER FUNCTION! ACC is the proof of accessibility for Et_cur 
+    (i.e. that the hole_depth of Et_cur decreases at each call) *)
+Program Fixpoint split_hole_scope_builder (r : rvar) (Et_acc Et_cur : EC_term) 
+        (ACC : Acc hole_depth_lt Et_cur) {struct ACC} : EC_term * EC_proc :=
+  match pop_EC_scope Et_cur with
   | (_, Ehol) => (Et_acc, Edeflam r Et_cur)
   | (Et_next, Edeflam r' Et_rest) => 
               split_hole_scope_builder r'
-                (Et_acc <=<[ Edeflam r Et_next ]) Et_rest
+                (Et_acc <=<[ Edeflam r Et_next ]) Et_rest 
+                (Acc_inv ACC _)
   | _ => (Ebag 0 0 Ehol, Ehol) (* Cannot reach here *)
   end.
-Next Obligation.
+Next Obligation. apply pop_EC_scope_reduces_hole_depth with (r := r'). 
+    unfold next_scope_to_hole. rewrite <- Heq_anonymous. reflexivity. Qed.
+Next Obligation. split; intros; injection; discriminate. Qed.
 
-
-Fixpoint split_hole_scope (Et : EC_term) : EC_term * EC_proc :=
-  match pop_top_scope_to_hole Et with
+(* Applies pop_EC_scope until the "hole scope" is reached,
+      separating the hole scope from the rest of the EC.
+   Given an EC, returns a pair whose 
+      first element is the EC with the hole scope replaced by a hole
+      and second element is the hole scope.
+   The invariants of pop_EC_scope are also held by split_hole_scope. *)
+Program Definition split_hole_scope (Et : EC_term) : EC_term * EC_proc :=
+  match pop_EC_scope Et with
   | (_, Ehol) => (Et, Ehol)
-  | (Et_acc, Edeflam r Et_cur) => split_hole_scope_builder r Et_acc Et_cur
+  | (Et_acc, Edeflam r Et_cur) => split_hole_scope_builder r Et_acc Et_cur _
   | _ => (Ebag 0 0 Ehol, Ehol) (* Cannot reach here *)
   end.
+Next Obligation. apply hole_depth_lt_wf. Qed.
+Next Obligation. split; intros; injection; discriminate. Qed.
 
- 
+Definition outer_scopes_from_hole Et := match split_hole_scope Et with (Et', _) => Et' end.
+Definition hole_scope Et := match split_hole_scope Et with (_, EP) => EP end.
 
 
-
-
-
-
-Fixpoint split_hole_scope_proc (EP_acc EP_cur : EC_proc) : EC_proc * EC_proc :=
-  match pop_top_scope_to_hole_proc EP_cur with
-  | (EP', Ehol) => (EP', Ehol)    (* EP = EP' from invariant *)
-  | (EP', Edeflam r (Ebag m n EPL)) => 
-      match split_hole_scope_proc EPL with
-      | (EPL', Ehol) => (EP', EPL')    (* EPL = EPL' from invariant *)
-      | (EPL', EP_base) => (EP' <=<[ EPL' ]p, EP_base)    (* EP_base is Edeflam from invariant *)
-      end
-  | _ => (Ehol, Ehol) (* Never reach here from invariant *)
+(* Applies a funciton f at the hole scope, returning the result *)
+Definition apply_at_hole_scope {X} (f : EC_term -> X) (Et : EC_term) :=
+  match hole_scope Et with
+  | Ehol => f Et
+  | Edeflam r Et_hs => f Et_hs
+  | _ => f (Ebag 0 0 Ehol) (* Cannot reach here *)
   end.
 
-
-
-
-(* *)
-Fixpoint split_hole_scope_proc (EP : EC_proc) : EC_proc * EC_proc :=
-  match pop_top_scope_to_hole_proc EP with
-  | (EP', Ehol) => (EP', Ehol)    (* EP = EP' from invariant *)
-  | (EP', Edeflam r (Ebag m n EPL)) => 
-      match split_hole_scope_proc EPL with
-      | (EPL', Ehol) => (EP', EPL')    (* EPL = EPL' from invariant *)
-      | (EPL', EP_base) => (EP' <=<[ EPL' ]p, EP_base)    (* EP_base is Edeflam from invariant *)
-      end
-  | (_, _) => (Ehol, Ehol) (* Never reach here from invariant *)
-  end.
-
-Fixpoint split_hole_scope (Et : EC_term) : EC_term * EC_proc :=
-  match pop_top_scope_to_hole Et with
-  | (Et', Ehol) => Et'    (* Et = Et' from invariant *)
-  | (Et', Edeflam r EtL) => 
-  end.
-
-
-(* Splits an EC between the scope of the hole and the rest of the EC.*)
-Fixpoint apply_at_hole_scope_proc {X} 
-    (f : EC_term -> X) (cur_scope : EC_term) (EP : EC_proc) : X :=
-  match EP with
-  | Ehol => f cur_scope
-  | Epar EP' _ => apply_at_hole_scope_proc f cur_scope EP'
-  | Edeflam _ Et => match Et with
-                    | Ebag _ _ EP' => apply_at_hole_scope_proc f Et EP'
-                    end
-  end.
-
-Definition apply_at_hole_scope {X} (f : EC_term -> X) (Et : EC_term) : X :=
-  match Et with
-  | Ebag _ _ EP => apply_at_hole_scope_proc f Et EP
-  end.
-
-
-(* Splits an EC between the scope of the hole and the rest of the EC.*)
-Fixpoint mutate_hole_scope_proc {X} 
-    (f : EC_term -> EC_term) (cur_scope : EC_term) (EP : EC_proc) : EC_term :=
-  match EP with
-  | Ehol => f cur_scope
-  | Epar EP' _ => mutate_hole_scope_proc f cur_scope EP'
-  | Edeflam _ Et => match Et with
-                    | Ebag _ _ EP' => apply_at_hole_scope_proc f Et EP'
-                    end
-  end.
-
-Definition mutate_hole_scope {X} (f : EC_term -> X) (Et : EC_term) : X :=
-  match Et with
-  | Ebag _ _ EP => mutate_hole_scope_proc f Et EP
+(* Mutates the hole scope with a function f *)
+Definition mutate_hole_scope (f : EC_term -> EC_term) (Et : EC_term) :=
+  match split_hole_scope Et with
+  | (_, Ehol) => f Et
+  | (Et_os, Edeflam r Et_hs) => Et_os <=<[ Edeflam r (f Et_hs) ]
+  | _ => Ebag 0 0 Ehol (* Cannot reach here *)
   end.
 
 
@@ -1778,11 +1759,11 @@ Definition mutate_hole_scope {X} (f : EC_term -> X) (Et : EC_term) : X :=
 
 
 
-  
+(* May not need bound_fvars *)
 
 (* Gives the number of bound variables (function or resource)
       at the scope of the hole *)
-Fixpoint bound_fvars_at_hole_term m_acc (Et : EC_term) : nat :=
+(* Fixpoint bound_fvars_at_hole_term m_acc (Et : EC_term) : nat :=
   match Et with
   | Ebag m _ EP => (bound_fvars_at_hole_proc (m_acc + m) EP)
   end
@@ -1793,21 +1774,20 @@ with bound_fvars_at_hole_proc m_acc (EP : EC_proc) : nat :=
   | Edeflam _ Et => (bound_fvars_at_hole_term m_acc Et)
   | Epar EP _ => (bound_fvars_at_hole_proc m_acc EP)
   end.
-  
-Fixpoint bound_rvars_at_hole_term n_acc (Et : EC_term) : nat :=
-  match Et with
-  | Ebag _ n EP => n + (bound_rvars_at_hole_proc (n_acc + n) EP)
-  end
 
-with bound_rvars_at_hole_proc n_acc (EP : EC_proc) : nat :=
-  match EP with
-  | Ehol => n_acc
-  | Edeflam _ Et => (bound_rvars_at_hole_term 1 Et)
-  | Epar EP _ => (bound_rvars_at_hole_proc n_acc EP)
+Definition bound_fvars_at_hole := bound_fvars_at_hole_term 0. *)
+
+
+
+Definition bound_rvars (Et : EC_term) : nat := 
+  match Et with Ebag _ n _ => n end.
+
+Definition bound_rvars_at_hole (Et : EC_term) : nat := 
+  match hole_scope Et with
+  | Ehol => bound_rvars Et
+  | Edeflam _ Et_hs => 1 + bound_rvars Et_hs
+  | _ => 0 (* Cannot reach here *)
   end.
-
-Definition bound_fvars_at_hole := bound_fvars_at_hole_term 0.
-Definition bound_rvars_at_hole := bound_rvars_at_hole_term 0.
 
 
 (* Define renamings on ECs *)
@@ -1859,9 +1839,10 @@ Definition cut_renaming n (r1 r2 r1' r2':nat) : ren n n :=
     @ren_compose n n nat (rename_var r1 r1') (rename_var r2 r2').
 
 
-(* FRAN: This is wrong *)
-Definition tuple_cut Et r1 r2 r1' r2' := 
-  rename_rvar_EC_term (cut_renaming (bound_rvars_at_hole Et) r1 r2 r1' r2') Et.
+
+Definition tuple_cut_hole_scope Et r1 r2 r1' r2' := 
+  let ren := cut_renaming (bound_rvars_at_hole Et) r1 r2 r1' r2' in
+  mutate_hole_scope (rename_rvar_EC_term ren) Et.
 
 Definition freshen_body m n n' n'' (r':nat) (P:proc) m' m'' :=
   let Q0 := rename_fvar_proc (ren_commute_str 0 m'' m' m) P in
@@ -1869,6 +1850,10 @@ Definition freshen_body m n n' n'' (r':nat) (P:proc) m' m'' :=
   let Q2 := @rename_rvar_proc (n' + (n'' + 1) + n) (n' + (n'' + 1) + n) 
                 (rename_var (n' + n'') r') Q1 in
   Q2.
+
+Definition freshen_body n_free 
+
+Definition applied_body
 
               
  Inductive prim_step : term -> term -> Prop :=
@@ -1888,25 +1873,25 @@ Definition freshen_body m n n' n'' (r':nat) (P:proc) m' m'' :=
   forall Et r r1 r2 r1' r2',    (*  -->  ET{r1=r1',r2=r2'} <=[ nul ]  *)
     prim_step
       (Et <=[ par (def r (tup r1 r2)) (def r (tup r1' r2')) ])
-      ((tuple_cut Et r1 r2 r1' r2') <=[ nul ])
+      ((tuple_cut_hole_scope Et r1 r2 r1' r2') <=[ nul ])
       
-| step_app :    (*  Et <=[ r <- lam r''. (bag m n P) | r' <- ?f | EP <=[ f r2 ] ]  *)
-  forall Et EP m n f r r' P,    (*  -->  Et <=[ '' | '' | EP <=[ freshen(P){r'=r''} ] ]  *)
+| step_app :    (*  Et <=[ r <- lam r''. Et_lam | r' <- ?f | EP <=[ f r2 ] ]  *)
+  forall Et EP Et_lam f r r',    (*  -->  Et <=[ '' | '' | EP <=[ freshen_body(P){r'=r''} ] ]  *)
     (* (1) scope_extrude -> ren_commute_str
        (2) weaken_f after step ? *)
     let Q' := (freshen_body m n r' P) in
     prim_step
     (Et <=[ (par (par
-                (def r (lam (bag m n P)))
+                (def r (lam Et_lam))
                 (def r (bng f)))
                 EP <=[ app f r' ]) ])
     (Et <=[ (par (par
-                (def r (lam (bag m n P)))
+                (def r (lam Et_lam))
                 (def r (bng f)))
                 EP <=[ app f r' ]) ]).
 
 
- Lemma wf_prim_step :
+Lemma wf_prim_step :
   forall m n (G: lctxt m) t t',
     wf_term m n G (zero n) t ->
     prim_step t t' ->
@@ -1921,9 +1906,10 @@ Qed.
 
 
 Inductive  step : nat -> nat -> term -> term -> Prop :=
-| step_equiv : forall m n t1 t1' t2,
+| step_equiv : forall m n t1 t1' t2' t2,
     t1 ≈t t1' ->
-    prim_step m n t1' t2 ->
+    prim_step m n t1' t2' ->
+    t2' ≈t t2 ->
     step m n t1 t2.
 
 
