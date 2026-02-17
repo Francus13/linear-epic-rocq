@@ -1507,23 +1507,30 @@ Ltac lia_goal :=
 
 
 
+    (* FRAN: This is inconsistent in canonicity with ren_id,
+        since it weakens variales out of scope.
+        Also why lt_dc instead of < (lt)? *)
 (* A renaming that changes the last m variables to (m + m'') *)
-Definition weaken_ren (m m' m'' : nat) : ren (m' + m) (m' + m'' + m) :=
+Definition weaken_tail_ren (m m' m'' : nat) : ren (m' + m) (m' + m'' + m) :=
   fun f =>
-    if lt_dec f m' then f else
-      f + m''.
+    if lt_dec f m' then f 
+    else f + m''.
+
+Definition weaken_ren (m n : nat) : ren m (n + m) :=
+  weaken_tail_ren m 0 n.
 
 Lemma ren_shift_weaken_commute : 
 forall (m' m0 m1 m2 : nat),
-  ren_shift m' (weaken_ren m0 m1 m2) =
-  weaken_ren m0 (m' + m1) m2.
+  ren_shift m' (weaken_tail_ren m0 m1 m2) =
+  weaken_tail_ren m0 (m' + m1) m2.
 Proof.
   intros.
   apply functional_extensionality.
   intros x.
-  unfold ren_shift, weaken_ren, ctxt_app, ren_id.
+  unfold ren_shift, weaken_tail_ren, ctxt_app, ren_id.
   lia_goal.
-Qed.  
+Qed.
+
 
 
 (* A renaming that commutes two adjacent variable spaces 
@@ -1543,7 +1550,7 @@ Definition ren_commute_str m0 m1 m2 m3:  ren (m0 + (m1 + m2) + m3) (m0 + (m2 + m
 (* Takes a process that typechecks in G' ⊗ G
     and moves it to G' ⊗ zero m'' ⊗ G *)
 Definition weaken_f m m' m'' (P : proc) : proc :=
-  rename_fvar_proc (weaken_ren m m' m'') P.
+  rename_fvar_proc (weaken_tail_ren m m' m'') P.
 
 
 
@@ -1759,8 +1766,6 @@ Definition mutate_hole_scope (f : EC_term -> EC_term) (Et : EC_term) :=
 
 
 
-(* May not need bound_fvars *)
-
 (* Gives the number of bound variables (function or resource)
       at the scope of the hole *)
 (* Fixpoint bound_fvars_at_hole_term m_acc (Et : EC_term) : nat :=
@@ -1791,6 +1796,7 @@ Definition bound_rvars_at_hole (Et : EC_term) : nat :=
 
 
 (* Define renamings on ECs *)
+
 Fixpoint rename_rvar_EC_proc {n n'} (v : ren n n') (EP : EC_proc) :=
   match EP with
   | Ehol => Ehol
@@ -1801,6 +1807,18 @@ Fixpoint rename_rvar_EC_proc {n n'} (v : ren n n') (EP : EC_proc) :=
 Definition rename_rvar_EC_term {n n'} (v : ren n n') (Et : EC_term) :=
   match Et with
   | Ebag m n'' EP => Ebag m n'' (rename_rvar_EC_proc (ren_shift n'' v) EP)
+  end.
+
+Fixpoint rename_fvar_EC_proc {m m'} (v : ren m m') (EP : EC_proc) :=
+  match EP with
+  | Ehol => Ehol
+  | Edeflam r Et => Edeflam r (rename_fvar_EC_term v Et)
+  | Epar EP P => Epar (rename_fvar_EC_proc v EP) (rename_fvar_proc v P)
+  end
+
+with rename_fvar_EC_term {m m'} (v : ren m m') (Et : EC_term) :=
+  match Et with
+  | Ebag m'' n EP => Ebag m'' n (rename_fvar_EC_proc (ren_shift m'' v) EP)
   end.
 
 
@@ -1846,12 +1864,29 @@ Definition tuple_cut_hole_scope Et r1 r2 r1' r2' :=
 
 Definition freshen_body m n n' n'' (r':nat) (P:proc) m' m'' :=
   let Q0 := rename_fvar_proc (ren_commute_str 0 m'' m' m) P in
-  let Q1 := rename_rvar_proc (weaken_ren (n'' + 1) 0 n') Q0 in
+  let Q1 := rename_rvar_proc (weaken_tail_ren (n'' + 1) 0 n') Q0 in
   let Q2 := @rename_rvar_proc (n' + (n'' + 1) + n) (n' + (n'' + 1) + n) 
                 (rename_var (n' + n'') r') Q1 in
   Q2.
 
-Definition freshen_body n_free 
+
+(* Readies the body of a lambda's term to be inserted into the application's scope 
+    - m and n vars are locally bound
+    - n_outer rvars are bound in the application's scope
+    - r_arg is the application's rvar argument
+    FIGURE OUT HOW TO PROPERLY MOVE FVARS
+*)
+Definition ready_body (m_outer m_free n_outer r_arg : nat) (Et : EC_term) : EC_proc :=
+  match Et with Ebag m n EP => 
+    (* Commute the m local fvars with the m_outer fvars *)
+    let EP1 := rename_fvar_EC_proc (ren_commute_str 0 m m_outer m_free) EP in
+    (* Weaken all scoped (n + 1) rvars to be after n_outer vars *)
+    let EP2 := rename_rvar_EC_proc (weaken_ren (n + 1) n_outer) EP1 in
+    (* Replace the single free rvar (i.e. the parameter) with the argument r_arg *)
+    let n_new := n + 1 + n_outer in
+    let EP3 := @rename_rvar_EC_proc n_new n_new (rename_var (n + n_outer) r_arg) EP2 in
+    EP2
+  end.
 
 Definition applied_body
 
@@ -3044,7 +3079,7 @@ Lemma wf_weaken_f_wpo :
     (HM : m0 = m' + m)
     (HG : G0 ≡[m0] (@ctxt_app _ m' m G' G)),
     wf_term (m' + m'' + m) n (G' ⊗ zero m'' ⊗ G) D
-      (rename_fvar_term (weaken_ren m m' m'') t))
+      (rename_fvar_term (weaken_tail_ren m m' m'') t))
   /\
     
     (forall m0 n (G0 : lctxt m0) (D : lctxt n) (P : proc),
@@ -3053,7 +3088,7 @@ Lemma wf_weaken_f_wpo :
           (HM : m0 = m' + m)
           (HG : G0 ≡[m0] (@ctxt_app _ m' m G' G)),
           wf_proc (m' + m'' + m) n (G' ⊗ zero m'' ⊗ G) D
-            (rename_fvar_proc (weaken_ren m m' m'') P))
+            (rename_fvar_proc (weaken_tail_ren m m' m'') P))
   /\
     (forall m0 n (G0 : lctxt m0) (D : lctxt n) (o : oper),
         wf_oper m0 n G0 D o ->
@@ -3061,7 +3096,7 @@ Lemma wf_weaken_f_wpo :
           (HM : m0 = m' + m)
           (HG : G0 ≡[m0] (@ctxt_app _ m' m G' G)),
           wf_oper (m' + m'' + m) n (G' ⊗ zero m'' ⊗ G) D
-            (rename_fvar_oper (weaken_ren m m' m'') o)).
+            (rename_fvar_oper (weaken_tail_ren m m' m'') o)).
 Proof.
 apply wf_tpo_ind; intros; simpl.
 - eapply wf_bag with (G' := G') (D' := D'); try assumption.
@@ -3083,7 +3118,7 @@ apply wf_tpo_ind; intros; simpl.
 - eapply wf_def with (D' := D'); auto.
 
 - eapply wf_app; auto.
-  + unfold weaken_ren.
+  + unfold weaken_tail_ren.
     lia_goal.
   + rewrite HG in HG0.
     rewrite HM in HG0.
@@ -3150,12 +3185,12 @@ apply wf_tpo_ind; intros; simpl.
   reflexivity.
   
 - eapply wf_bng; auto.
-  + unfold weaken_ren.
+  + unfold weaken_tail_ren.
     lia_goal.
   + rewrite HG in HG0.
     rewrite HM in HG0.
     symmetry.
-    unfold weaken_ren.
+    unfold weaken_tail_ren.
     destruct (lt_dec f m').
     * unfold one, delta, ctxt_eq, ctxt_app, zero in *;
       intros x Hx; destruction.
@@ -3205,10 +3240,10 @@ Lemma weak_rvar_oper :
     forall n n' n'' (D : lctxt n) (D' : lctxt n')
       (HN : n0 = n' + n)
       (HD0 : D0 ≡[n0] (@ctxt_app _ n' n D' D)),
-      wf_oper m (n' + n'' + n) G (D' ⊗ zero n'' ⊗ D) (rename_rvar_oper (weaken_ren n n' n'') o).
+      wf_oper m (n' + n'' + n) G (D' ⊗ zero n'' ⊗ D) (rename_rvar_oper (weaken_tail_ren n n' n'') o).
 Proof.
   intros; induction o.
-  all : (unfold weaken_ren, rename_rvar_oper; simpl).
+  all : (unfold weaken_tail_ren, rename_rvar_oper; simpl).
   - inversion H; existT_eq; subst. 
     apply wf_emp; auto. 
     unfold ctxt_app, zero, ctxt_eq in *.
@@ -3361,7 +3396,7 @@ Lemma weak_rvar_proc :
       (HN : n0 = n' + n)
       (HD0 : D0 ≡[n0] (@ctxt_app _ n' n D' D)),
       wf_proc m (n' + n'' + n) G (@ctxt_app _ (n' + n'') n (@ctxt_app _ n' n'' D' (zero n'')) D)
-                (rename_rvar_proc (weaken_ren n n' n'') P).
+                (rename_rvar_proc (weaken_tail_ren n n' n'') P).
 Proof.
   intros m n0 G D0 P.
   revert m n0 G D0.
@@ -3383,7 +3418,7 @@ Proof.
       3 : { eapply weak_rvar_oper with (n0 := n' + n) (D0 := D'0).
             all : (try assumption).
             reflexivity. }
-      all : (unfold weaken_ren; destruct (lt_dec r n'); try lia).
+      all : (unfold weaken_tail_ren; destruct (lt_dec r n'); try lia).
       assert (one (n' + n'' + n) r ≡[ n' + n'' + n] 
               (@ctxt_app _ (n' + n'') n ((one n' r) ⊗ (zero n'')) (zero n))).
       { unfold one, delta, ctxt_eq, ctxt_app, zero.
@@ -3408,7 +3443,7 @@ Proof.
       3 : { eapply weak_rvar_oper with (n0 := n' + n) (D0 := D'0).
             all : (try assumption).
             reflexivity. }
-      all : (unfold weaken_ren; destruct (lt_dec r n'); try lia).
+      all : (unfold weaken_tail_ren; destruct (lt_dec r n'); try lia).
       assert (one (n' + n'' + n) (r + n'') ≡[ n' + n'' + n] 
                   (@ctxt_app _ (n' + n'') n ((zero n') ⊗ (zero n'')) (one n (r - n')))).
       { unfold one, delta, ctxt_eq, ctxt_app, zero.
@@ -3428,10 +3463,10 @@ Proof.
     intros Hn0 HD0.
     simpl; inversion HP; existT_eq; subst.
     eapply wf_app with (D := (@ctxt_app _ (n' + n'') n (D' ⊗ zero n'') D)); try assumption.
-    unfold weaken_ren; destruct (lt_dec r n'); try lia.
+    unfold weaken_tail_ren; destruct (lt_dec r n'); try lia.
     specialize (one_app_zero n n' r) as Hr1. 
     assert (r < n' + n) by lia; apply Hr1 in H; clear Hr1.
-    unfold weaken_ren; destruct (lt_dec r n'); try lia.
+    unfold weaken_tail_ren; destruct (lt_dec r n'); try lia.
     destruct H as [Hr1 | Hr1']. destruct Hr1 as [Hr1 Hr1'].
     assert (one (n' + n'' + n) r ≡[ n' + n'' + n] 
             (@ctxt_app _ (n' + n'') n ((one n' r) ⊗ (zero n'')) (zero n))).
@@ -3508,7 +3543,7 @@ Qed.
 
 Definition freshen_body m m' m'' (n:nat) n' n'' (r':nat) (Q:proc) :=
   let Q0 := rename_fvar_proc (ren_commute_str 0 m'' m' m) Q in
-  let Q1 := rename_rvar_proc (weaken_ren (n'' + 1) 0 n') Q0 in
+  let Q1 := rename_rvar_proc (weaken_tail_ren (n'' + 1) 0 n') Q0 in
   let Q2 := @rename_rvar_proc (n' + (n'' + 1) + n) (n' + (n'' + 1) + n) (rename_var (n' + n'') r') Q1 in
   Q2.
 
@@ -3543,7 +3578,7 @@ forall m m' m'' n' n'' (G'0 : lctxt m'') (D'1 : lctxt n'') (Q : proc),
                 (rename_fvar_proc (ren_commute_str 0 m'' m' m) Q)) -> 
     wf_proc (m' + m'' + m) (n' + (n'' + 1)) (@ctxt_app _ (m' + m'') m (@ctxt_app _ m' m'' (zero m') G'0) (zero m))
             (@ctxt_app _ n' (n'' + 1) (zero n') ((D'1 ⊗ (1 [0 ↦ 1]))))
-            ((rename_rvar_proc (weaken_ren (n'' + 1) 0 n')
+            ((rename_rvar_proc (weaken_tail_ren (n'' + 1) 0 n')
               (rename_fvar_proc (ren_commute_str 0 m'' m' m) Q))).
 Proof.
   intros.
