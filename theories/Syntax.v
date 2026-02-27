@@ -1691,6 +1691,13 @@ Definition pop_EC_scope (Et : EC_term) : EC_term * EC_proc :=
 Definition top_scope Et := match pop_EC_scope Et with (Et', _) => Et' end.
 Definition next_scope_to_hole Et := match pop_EC_scope Et with (_, EP) => EP end.
 
+(* FRAN: Is there a cleaner way for boolean equality on inductive constructs? *)
+Definition is_hole_top_scope Et : bool :=
+  match next_scope_to_hole Et with
+  | Ehol => true
+  | _ => false
+  end.
+
 
 (* pop_EC_scope reduces hole_depth *)
 Lemma pop_EC_scope_reduces_hole_depth : forall Et Et' r, 
@@ -1819,7 +1826,15 @@ with rename_fvar_EC_term {m m'} (v : ren m m') (Et : EC_term) :=
 
 
 
+
+
+
+
 (* Operational Semantics --------------------------------------------------- *)
+
+
+
+(* Helper functions for tuple cuts *)
                   
 (* Gives a "collapsed" renaming that only renames r1 to r2 *)
 Definition rename_if_neq n (r1 r2 : nat) : ren n n :=
@@ -1852,42 +1867,85 @@ Definition cut_renaming n (r1 r2 r1' r2':nat) : ren n n :=
   else
     @ren_compose n n nat (rename_var r1 r1') (rename_var r2 r2').
 
-
-
 Definition tuple_cut_hole_scope Et r1 r2 r1' r2' := 
   let ren := cut_renaming (bound_rvars_at_hole Et) r1 r2 r1' r2' in
   mutate_hole_scope (rename_rvar_EC_term ren) Et.
 
-Definition freshen_body m n n' n'' (r':nat) (P:proc) m' m'' :=
-  let Q0 := rename_fvar_proc (ren_commute_str 0 m'' m' m) P in
-  let Q1 := rename_rvar_proc (weaken_tail_ren (n'' + 1) 0 n') Q0 in
-  let Q2 := @rename_rvar_proc (n' + (n'' + 1) + n) (n' + (n'' + 1) + n) 
-                (rename_var (n' + n'') r') Q1 in
-  Q2.
 
 
-(* Readies the body of a lambda's term to be inserted into the application's scope 
-    - m and n vars are locally bound
-    - n_outer rvars are bound in the application's scope
-    - r_arg is the application's rvar argument
-    FIGURE OUT HOW TO PROPERLY MOVE FVARS
-*)
-Definition ready_body (m_outer m_free n_outer r_arg : nat) (Et : EC_term) : EC_proc :=
-  match Et with Ebag m n EP => 
-    (* Commute the m local fvars with the m_outer fvars *)
-    let EP1 := rename_fvar_EC_proc (ren_commute_str 0 m m_outer m_free) EP in
-    (* Weaken all scoped (n + 1) rvars to be after n_outer vars *)
-    let EP2 := rename_rvar_EC_proc (weaken_ren (n + 1) n_outer) EP1 in
-    (* Replace the single free rvar (i.e. the parameter) with the argument r_arg *)
-    let n_new := n + 1 + n_outer in
-    let EP3 := @rename_rvar_EC_proc n_new n_new (rename_var (n + n_outer) r_arg) EP2 in
-    EP2
+(* Helper functions for function application *)
+
+(* Renames rvars in a lambda body for its application
+    - n rvars are bound in the lambda body
+    - n_app rvars are bound in the application's scope
+    - r_arg is the application's rvar argument   *)
+Definition ready_body_rvar (n_app n r_arg : nat) (P : proc) : proc :=
+  (* Weaken the scope : [n + 1] -> [n_app + n + 1] *)
+  let P1 := rename_rvar_proc (weaken_ren (n + 1) n_app) P in
+  (* Replace the single free rvar (i.e. the parameter) with the argument r_arg *)
+  let n_total := n + 1 + n_app in
+  @rename_rvar_proc n_total n_total (rename_var (n + n_app) r_arg) P1.
+
+(* Renames fvars in a lambda body for its application,
+   for when the lambda and application are in the same scope
+          (the two cases require different treatments of the fvars 
+           bound in the scope containing the lambda)
+    - m fvars are bound in the lambda body
+    - m_app fvars are bound in the application/lambda's scope
+    - m_free outer fvars are free in the application/lambda's scope    *)
+Definition ready_body_fvar_same_scope (m_free m_app m : nat) (P : proc) : proc :=
+  (* Move the m bindings to end of new local scope : 
+        [m + m_app + m_free] -> [m_app + m + m_free] *)
+  rename_rvar_proc (ren_commute_str 0 m m_app m_free) P.
+
+(* Renames fvars in a lambda body for its application,
+   for when the lambda and application are in different scopes (read above)
+    - m fvars are bound in the lambda body
+    - m_app fvars are bound in the application's scope
+    - m_outer fvars are *well-scoped* (free or bound) in the lambda's scope
+    - m_inner fvars are bound between the lambda's scope and application's scope (exclusive)    *)
+Definition ready_body_fvar_diff_scope (m_outer m_inner m_app m : nat) (P : proc) : proc :=
+  (* Weaken the scope : [m + m_outer] -> [m_app + m_inner + m + m_outer] *)
+  let P1 := rename_rvar_proc (weaken_ren (m + m_outer) (m_app + m_inner)) P in
+  (* Move the m bindings to end of new local scope : 
+          [m_app + m_inner + m + m_outer] -> [m_app + m + m_inner + m_outer] *)
+  rename_rvar_proc (ren_commute_str m_app m_inner m m_outer) P1.
+
+
+
+
+
+
+
+(* Readies a lambda body for insertion into the application's scope *)
+Definition ready_body (Et : EC_term) (EP : EC_proc) (t : term) (r_arg : nat) : proc :=
+  match t with bag m n P =>
+    (* Do rvar renaming *)
+    let P1 := ready_body_rvar N_APP n r_arg P in
+    (* Do fvar renaming, casing on whether the lambda 
+        and application reside in the same scope *)
+    TODO
   end.
 
-Definition applied_body
+
+
+
+
+
+(* Applies a function (lam t) with argument r_arg,
+   for filling EP (whose hole is the application site).
+    - Et is the context of (lam t) and EP (used for determing the free fvars in t)
+    - EP is the remaining context for the application site
+    - t is the lambda's term
+    - r_arg is the argument    *)
+Definition apply_function (Et : EC_term) (EP : EC_proc) (t : term) (r_arg : nat) : proc :=
+  let P := ready_body Et EP t r_arg in
+  TODO
+.
+
 
               
- Inductive prim_step : term -> term -> Prop :=
+Inductive prim_step : term -> term -> Prop :=
 | step_par_nul :    (*  Et <=[ P | nul ]  -->  Et <=[ P ]  *)
   forall Et P,
     prim_step
@@ -1906,20 +1964,20 @@ Definition applied_body
       (Et <=[ par (def r (tup r1 r2)) (def r (tup r1' r2')) ])
       ((tuple_cut_hole_scope Et r1 r2 r1' r2') <=[ nul ])
       
-| step_app :    (*  Et <=[ r <- lam r''. Et_lam | r' <- ?f | EP <=[ f r2 ] ]  *)
-  forall Et EP Et_lam f r r',    (*  -->  Et <=[ '' | '' | EP <=[ freshen_body(P){r'=r''} ] ]  *)
-    (* (1) scope_extrude -> ren_commute_str
-       (2) weaken_f after step ? *)
-    let Q' := (freshen_body m n r' P) in
+| step_app :    (*  Et <=[ rf <- lam r'. t | rf <- ?f | EP <=[ f r ] ]  *)
+  forall Et EP t f f' rf r,    (*  -->  Et <=[ '' | '' | EP <=[ fresh_body(t){r=r'} ] ]  *)
+    (* let Q' := (freshen_body m n r' P) in *)
+    (* NEED TO CONSTRIN f = f' *)
     prim_step
     (Et <=[ (par (par
-                (def r (lam Et_lam))
-                (def r (bng f)))
-                EP <=[ app f r' ]) ])
+                (def rf (lam t))
+                (def rf (bng f)))
+                (EP <=[ app f' r ]p)) ])
     (Et <=[ (par (par
-                (def r (lam Et_lam))
-                (def r (bng f)))
-                EP <=[ app f r' ]) ]).
+                (def rf (lam t))
+                (def rf (bng f)))
+                (apply_function Et EP t r)) ])
+  .
 
 
 Lemma wf_prim_step :
