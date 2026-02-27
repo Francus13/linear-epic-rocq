@@ -1285,7 +1285,6 @@ Inductive peq_o (m n : nat) (o o' : oper) : Prop :=
     (EQ : peq_oper m n bf br o o'),
     peq_o m n o o'.
 
-(* FRAN: Why can't I use this notation to replace (peq_t m n t t) below? *)
 Infix "[t≡ m n ]" := (peq_t m n) (at level 55).
 Infix "[p≡ m n ]" := (peq_p m n) (at level 55).
 Infix "[o≡ m n ]" := (peq_o m n) (at level 55).
@@ -1695,13 +1694,10 @@ Proof.
   - discriminate.
   - injection H; intros. rewrite H0. apply Nat.lt_succ_diag_r.
   - apply IHEP. rewrite <- H. unfold next_scope_to_hole; simpl.
-    destruct (pop_EC_scope_proc EP). reflexivity.   (* FRAN: Why did this work? *)
+    destruct (pop_EC_scope_proc EP). reflexivity.
 Qed.
 
 
-
-(* FRAN: Is there a way to tell the pattern matching system that
-    the second element of pop_EC_scope can never be Epar? *)
 
 (* HELPER FUNCTION! ACC is the proof of accessibility for Et_cur 
     (i.e. that the hole_depth of Et_cur decreases at each call) *)
