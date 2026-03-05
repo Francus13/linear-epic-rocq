@@ -1,13 +1,18 @@
 From Stdlib Require Import
-  Arith            
+  Arith   
+  Basics         
   Classes.RelationClasses
   Logic.FunctionalExtensionality
   Morphisms
+  Nat
   Program.Basics
   List
   Lia.
 
 From LEpic Require Import Contexts.
+
+Local Open Scope program_scope.
+Local Open Scope bool_scope.
 
 Definition rvar := nat.
 Definition fvar := nat.
@@ -98,6 +103,10 @@ Scheme term_rec_m := Induction for term Sort Set
   with oper_rec_m := Induction for oper Sort Set.
 Combined Scheme tpo_rec from term_rec_m, proc_rec_m, oper_rec_m.
 
+(* Projects the term components *)
+Definition get_fvars t := match t with bag m _ _ => m end.
+Definition get_rvars t := match t with bag _ n _ => n end.
+Definition get_proc t := match t with bag _ _ P => P end.
 
 
 (* Scoping *)
@@ -476,8 +485,7 @@ Unset Elimination Schemes.
 Inductive wf_term : forall (m n:nat), term -> Prop :=
 | wf_bag :
   forall m n m' n'
-    (G : lctxt m)
-    (D : lctxt n)
+    (G : lctxt m) (D : lctxt n)
     (UG : forall x, x < m -> (G x) = 1)
     (UD : forall x, x < n -> (D x) = 2 \/ (D x) = 0)
     (P : proc)
@@ -488,7 +496,7 @@ with wf_proc : forall (m n:nat), lctxt m -> lctxt n -> proc -> Prop :=
 | wf_def :
   forall m n
     (G : lctxt m)
-    (D : lctxt n) (D' : lctxt n)
+    (D D' : lctxt n)
     (r : rvar) (HR : r < n)
     (o : oper)
     (HD : D ≡[n] (one n r) ⨥ D')
@@ -565,8 +573,7 @@ Scheme wf_term_ind := Induction for wf_term Sort Prop
 Combined Scheme wf_tpo_ind from wf_term_ind, wf_proc_ind, wf_oper_ind.
 
 (* A helpful tactic for dealing with equivalences of existT terms that
-   arise when inverting wf judgments.
- *)
+   arise when inverting wf judgments. *)
 Ltac existT_eq :=
       repeat match goal with 
       | [H : existT _ _ _ = existT _ _ _ |- _ ] =>
@@ -1507,7 +1514,9 @@ Ltac lia_goal :=
 
 
     (* FRAN: This is inconsistent in canonicity with ren_id,
-        since it weakens variales out of scope.
+        since it weakens variables out of scope.
+        Update: It actually needs to weaken variables out of scope
+        so that we don't need to track the free variables in the semantics.
         Also why lt_dc instead of < (lt)? *)
 (* A renaming that changes the last m variables to (m + m'') *)
 Definition weaken_tail_ren (m m' m'' : nat) : ren (m' + m) (m' + m'' + m) :=
@@ -1534,7 +1543,8 @@ Qed.
 
 (* A renaming that commutes two adjacent variable spaces 
     (m1 and m2 in length) starting after m0 variables *)
-Definition ren_commute_str m0 m1 m2 m3:  ren (m0 + (m1 + m2) + m3) (m0 + (m2 + m1) + m3) :=
+Definition ren_commute_str m0 m1 m2 m3 : 
+        ren (m0 + (m1 + m2) + m3) (m0 + (m2 + m1) + m3) :=
   fun x =>
     if (lt_dec x m0) then x 
     else if (lt_dec x (m0 + m1)) then (x + m2)
@@ -1548,8 +1558,8 @@ Definition ren_commute_str m0 m1 m2 m3:  ren (m0 + (m1 + m2) + m3) (m0 + (m2 + m
 
 (* Takes a process that typechecks in G' ⊗ G
     and moves it to G' ⊗ zero m'' ⊗ G *)
-Definition weaken_f m m' m'' (P : proc) : proc :=
-  rename_fvar_proc (weaken_tail_ren m m' m'') P.
+Definition weaken_f m m' m'' :=
+  rename_fvar_proc (weaken_tail_ren m m' m'').
 
 
 
@@ -1614,21 +1624,24 @@ with EC_fill_EC_proc (EP : EC_proc) (EP' : EC_proc) : EC_proc :=
 where "Et <=<[ EP ]" := (EC_fill_EC_term Et EP)
 and   "EP <=<[ EP' ]p" := (EC_fill_EC_proc EP EP').
 
+(* Projects the EC_term components *)
+Definition get_fvars_Et Et := match Et with Ebag m _ _ => m end.
+Definition get_rvars_Et Et := match Et with Ebag _ n _ => n end.
+Definition get_proc_Et Et := match Et with Ebag _ _ EP => EP end.
 
 
 (* Gives the number of lambda bindings encountered when traversing 
       to the hole (i.e. how many scopes deep the hole is) *)
-Fixpoint hole_depth (Et : EC_term) : nat :=
-  match Et with
-  | Ebag _ _ EP => hole_depth_proc EP
-  end
-
+Fixpoint hole_depth Et := hole_depth_proc (get_proc_Et Et)
 with hole_depth_proc (EP : EC_proc) : nat :=
   match EP with
   | Ehol => 0
   | Edeflam _ Et => 1 + hole_depth Et
   | Epar EP' _ => hole_depth_proc EP'
   end.
+
+Definition is_hole_scope_at_top := (eqb 0) ∘ hole_depth.
+Definition is_hole_scope_at_top_proc := (eqb 0) ∘ hole_depth_proc.
 
 (* States the hole_depth of an EC is less than another *)
 Definition hole_depth_lt (Et1 Et2 : EC_term) := 
@@ -1691,14 +1704,6 @@ Definition pop_EC_scope (Et : EC_term) : EC_term * EC_proc :=
 Definition top_scope Et := match pop_EC_scope Et with (Et', _) => Et' end.
 Definition next_scope_to_hole Et := match pop_EC_scope Et with (_, EP) => EP end.
 
-(* FRAN: Is there a cleaner way for boolean equality on inductive constructs? *)
-Definition is_hole_top_scope Et : bool :=
-  match next_scope_to_hole Et with
-  | Ehol => true
-  | _ => false
-  end.
-
-
 (* pop_EC_scope reduces hole_depth *)
 Lemma pop_EC_scope_reduces_hole_depth : forall Et Et' r, 
     next_scope_to_hole Et = Edeflam r Et' -> hole_depth_lt Et' Et.
@@ -1744,17 +1749,28 @@ Program Definition split_hole_scope (Et : EC_term) : EC_term * EC_proc :=
 Next Obligation. apply hole_depth_lt_wf. Qed.
 Next Obligation. split; intros; injection; discriminate. Qed.
 
-Definition outer_scopes_from_hole Et := match split_hole_scope Et with (Et', _) => Et' end.
-Definition hole_scope Et := match split_hole_scope Et with (_, EP) => EP end.
+Definition bubble_hole_scope_up Et := 
+  match split_hole_scope Et with 
+  | (_, Ehol) => Ebag 0 0 Ehol
+  | (Et', _) => Et' 
+  end.
+
+Definition hole_scope Et := 
+  match split_hole_scope Et with 
+  | (_, Edeflam _ Et_lam) => Et_lam
+  | _ => Et   (* Only reachable when hole is at top scope *)
+  end.
+
 
 
 (* Applies a funciton f at the hole scope, returning the result *)
-Definition apply_at_hole_scope {X} (f : EC_term -> X) (Et : EC_term) :=
-  match hole_scope Et with
-  | Ehol => f Et
-  | Edeflam r Et_hs => f Et_hs
-  | _ => f (Ebag 0 0 Ehol) (* Cannot reach here *)
-  end.
+Definition apply_at_hole_scope {X} (f : EC_term -> X) := 
+  f ∘ hole_scope.
+
+(* Applies either f1 or f2 to the hole scope, depending on whether 
+   the hole scope is the top scope *)
+Definition case_hole_scope_at_top {X} (f1 f2 : EC_term -> X) (Et : EC_term) :=
+  (if is_hole_scope_at_top Et then f1 else f2) (hole_scope Et).
 
 (* Mutates the hole scope with a function f *)
 Definition mutate_hole_scope (f : EC_term -> EC_term) (Et : EC_term) :=
@@ -1766,39 +1782,7 @@ Definition mutate_hole_scope (f : EC_term -> EC_term) (Et : EC_term) :=
 
 
 
-
-
-
-(* Gives the number of bound variables (function or resource)
-      at the scope of the hole *)
-(* Fixpoint bound_fvars_at_hole_term m_acc (Et : EC_term) : nat :=
-  match Et with
-  | Ebag m _ EP => (bound_fvars_at_hole_proc (m_acc + m) EP)
-  end
-
-with bound_fvars_at_hole_proc m_acc (EP : EC_proc) : nat :=
-  match EP with
-  | Ehol =>  m_acc
-  | Edeflam _ Et => (bound_fvars_at_hole_term m_acc Et)
-  | Epar EP _ => (bound_fvars_at_hole_proc m_acc EP)
-  end.
-
-Definition bound_fvars_at_hole := bound_fvars_at_hole_term 0. *)
-
-
-
-Definition bound_rvars (Et : EC_term) : nat := 
-  match Et with Ebag _ n _ => n end.
-
-Definition bound_rvars_at_hole (Et : EC_term) : nat := 
-  match hole_scope Et with
-  | Ehol => bound_rvars Et
-  | Edeflam _ Et_hs => 1 + bound_rvars Et_hs
-  | _ => 0 (* Cannot reach here *)
-  end.
-
-
-(* Define renamings on ECs *)
+(* Apply renamings on ECs *)
 
 Fixpoint rename_rvar_EC_proc {n n'} (v : ren n n') (EP : EC_proc) :=
   match EP with
@@ -1806,7 +1790,6 @@ Fixpoint rename_rvar_EC_proc {n n'} (v : ren n n') (EP : EC_proc) :=
   | Edeflam r Et => Edeflam (v r) Et
   | Epar EP P => Epar (rename_rvar_EC_proc v EP) (rename_rvar_proc v P)
   end.
-
 Definition rename_rvar_EC_term {n n'} (v : ren n n') (Et : EC_term) :=
   match Et with
   | Ebag m n'' EP => Ebag m n'' (rename_rvar_EC_proc (ren_shift n'' v) EP)
@@ -1818,11 +1801,63 @@ Fixpoint rename_fvar_EC_proc {m m'} (v : ren m m') (EP : EC_proc) :=
   | Edeflam r Et => Edeflam r (rename_fvar_EC_term v Et)
   | Epar EP P => Epar (rename_fvar_EC_proc v EP) (rename_fvar_proc v P)
   end
-
 with rename_fvar_EC_term {m m'} (v : ren m m') (Et : EC_term) :=
   match Et with
   | Ebag m'' n EP => Ebag m'' n (rename_fvar_EC_proc (ren_shift m'' v) EP)
   end.
+
+
+
+Unset Elimination Schemes.
+
+Inductive wf_EC_term : forall (m n:nat), lctxt m -> lctxt n -> EC_term -> Prop :=
+| wf_Ebag :
+  forall m n m' n'
+    (G G_hol : lctxt m) (D D_hol : lctxt n)
+    (UG : forall x, x < m -> ((G ⨥ G_hol) x) = 1)
+    (UD : forall x, x < n -> ((D ⨥ D_hol) x) = 2 \/ (D x) = 0)
+    (EP : EC_proc)
+    (WFP : wf_EC_proc (m + m') (n + n') 
+                      (G ⊗ (zero m')) (D ⊗ (flat_ctxt 1 n')) 
+                      G_hol D_hol EP),
+    wf_EC_term m' n' G_hol D_hol (Ebag m n EP)
+
+with wf_EC_proc : forall (m n:nat), 
+                  lctxt m -> lctxt n -> lctxt m -> lctxt n -> EC_proc -> Prop :=
+| wf_Ehol :
+  forall m n
+    (G G_hol : lctxt m) (D D_hol : lctxt n)
+    (HG : G ≡[m] (zero m))
+    (HD : D ≡[n] (zero n)),
+    wf_EC_proc m n G D G_hol D_hol Ehol
+
+| wf_Epar :
+  forall m n
+    (G1 G2 G G_hol : lctxt m)
+    (D1 D2 D D_hol : lctxt n)
+    (EP : EC_proc) (P : proc)
+    (WFP1 : wf_EC_proc m n G1 D1 G_hol D_hol EP)
+    (WFP2 : wf_proc m n G2 D2 P)
+    (HG : G ≡[m] (G1 ⨥ G2))
+    (HD : D ≡[n] (D1 ⨥ D2)),
+    wf_EC_proc m n G D G_hol D_hol (Epar EP P)
+
+| wf_Edeflam :
+  forall m n
+    (G G_hol : lctxt m)
+    (D D_hol : lctxt n)
+    (r : rvar) (HR : r < n)
+    (Et : EC_term)
+    (HD : D ≡[n] (one n r))
+    (WFT : wf_EC_term m 1 G_hol D_hol Et),
+    wf_EC_proc m n G D G_hol D_hol (Edeflam r Et).
+
+Set Elimination Schemes.
+
+Scheme wf_EC_term_ind := Induction for wf_EC_term Sort Prop
+    with wf_EC_proc_ind := Induction for wf_EC_proc Sort Prop.
+
+Combined Scheme wf_EC_ind from wf_EC_term_ind, wf_EC_proc_ind.
 
 
 
@@ -1867,83 +1902,139 @@ Definition cut_renaming n (r1 r2 r1' r2':nat) : ren n n :=
   else
     @ren_compose n n nat (rename_var r1 r1') (rename_var r2 r2').
 
+(* Gives the number of rvars in scope at the hole *)
+Definition scoped_rvars_at_hole : EC_term -> nat := 
+  case_hole_scope_at_top 
+    (get_rvars_Et) 
+    ((add 1) ∘ get_rvars_Et).
+
 Definition tuple_cut_hole_scope Et r1 r2 r1' r2' := 
-  let ren := cut_renaming (bound_rvars_at_hole Et) r1 r2 r1' r2' in
+  let ren := cut_renaming (scoped_rvars_at_hole Et) r1 r2 r1' r2' in
   mutate_hole_scope (rename_rvar_EC_term ren) Et.
 
 
 
 (* Helper functions for function application *)
 
+(* Gives the number of fvars bound by the hole scope *)
+Definition bound_fvars_at_hole_scope : EC_term -> nat :=
+  apply_at_hole_scope get_fvars_Et.
+
+(* Gives the number of fvars bound in all scopes *)
+Fixpoint bound_fvars_to_hole Et : nat :=
+  match Et with Ebag m _ EP => m + (bound_fvars_to_hole_proc EP) end
+with bound_fvars_to_hole_proc EP : nat :=
+  match EP with
+  | Ehol => 0
+  | Epar EP' _ => bound_fvars_to_hole_proc EP'
+  | Edeflam _ Et => bound_fvars_to_hole Et
+  end.
+  
+(* Gives the number of fvars bound before the hole scope *)
+Definition bound_fvars_before_hole_scope Et : nat :=
+  bound_fvars_to_hole (bubble_hole_scope_up Et).
+
+  
+(* Adds new bound fvars to the end of the top scope, shifting all free fvars *)
+Definition add_fvars m_new Et : EC_term :=
+  let Et_new := match Et with Ebag m n EP => Ebag (m + m_new) n EP end in
+  rename_fvar_EC_term (weaken_ren 0 m_new) Et_new.
+
+(* Adds new bound fvars to the hole scope, shifting all its free fvars *)
+Definition add_fvars_hole_scope m_new : EC_term -> EC_term :=
+  mutate_hole_scope (add_fvars m_new).
+
+
 (* Renames rvars in a lambda body for its application
     - n rvars are bound in the lambda body
     - n_app rvars are bound in the application's scope
     - r_arg is the application's rvar argument   *)
 Definition ready_body_rvar (n_app n r_arg : nat) (P : proc) : proc :=
-  (* Weaken the scope : [n + 1] -> [n_app + n + 1] *)
+    (* Weaken the scope : [n + 1] -> [n_app + n + 1] *)
   let P1 := rename_rvar_proc (weaken_ren (n + 1) n_app) P in
-  (* Replace the single free rvar (i.e. the parameter) with the argument r_arg *)
+    (* Replace the single free rvar (i.e. the parameter) with the argument r_arg *)
   let n_total := n + 1 + n_app in
   @rename_rvar_proc n_total n_total (rename_var (n + n_app) r_arg) P1.
 
-(* Renames fvars in a lambda body for its application,
+(* Renames fvars in a lambda body for an application,
    for when the lambda and application are in the same scope
           (the two cases require different treatments of the fvars 
            bound in the scope containing the lambda)
     - m fvars are bound in the lambda body
-    - m_app fvars are bound in the application/lambda's scope
-    - m_free outer fvars are free in the application/lambda's scope    *)
-Definition ready_body_fvar_same_scope (m_free m_app m : nat) (P : proc) : proc :=
-  (* Move the m bindings to end of new local scope : 
+    - m_app fvars are bound in the application/lambda's scope   *)
+Definition ready_body_fvar_same_scope (m_app m : nat) (P : proc) : proc :=
+    (* Move the m bindings to end of new local scope : 
         [m + m_app + m_free] -> [m_app + m + m_free] *)
-  rename_rvar_proc (ren_commute_str 0 m m_app m_free) P.
+  rename_rvar_proc (ren_commute_str 0 m m_app 0) P.
 
-(* Renames fvars in a lambda body for its application,
+(* Renames fvars in a lambda body for an application,
    for when the lambda and application are in different scopes (read above)
     - m fvars are bound in the lambda body
     - m_app fvars are bound in the application's scope
-    - m_outer fvars are *well-scoped* (free or bound) in the lambda's scope
     - m_inner fvars are bound between the lambda's scope and application's scope (exclusive)    *)
-Definition ready_body_fvar_diff_scope (m_outer m_inner m_app m : nat) (P : proc) : proc :=
-  (* Weaken the scope : [m + m_outer] -> [m_app + m_inner + m + m_outer] *)
-  let P1 := rename_rvar_proc (weaken_ren (m + m_outer) (m_app + m_inner)) P in
-  (* Move the m bindings to end of new local scope : 
-          [m_app + m_inner + m + m_outer] -> [m_app + m + m_inner + m_outer] *)
-  rename_rvar_proc (ren_commute_str m_app m_inner m m_outer) P1.
+Definition ready_body_fvar_diff_scope (m_inner m_app m : nat) (P : proc) : proc :=
+    (* Weaken the scope : [m + m_free] -> [m_app + m_inner + m + m_free] *)
+  let P1 := rename_rvar_proc (weaken_ren m (m_app + m_inner)) P in
+    (* Move the m bindings to end of new local scope : 
+          [m_app + m_inner + m + m_free] -> [m_app + m + m_inner + m_free] *)
+  rename_rvar_proc (ren_commute_str m_app m_inner m 0) P1.
 
 
+(* Readies a lambda body for insertion into the application's scope
+    - Et is the context of the application site
+    - t is the lambda's term
+    - r_arg is the argument
+   In same_scope, the lambda definition is expected to be in the
+      application scope (which is the hole scope). 
+   In diff_scope, the lambda definition is expected to be free from Et. *)
 
-
-
-
-
-(* Readies a lambda body for insertion into the application's scope *)
-Definition ready_body (Et : EC_term) (EP : EC_proc) (t : term) (r_arg : nat) : proc :=
+Definition ready_body_same_scope (Et : EC_term) (t : term) (r_arg : nat) : proc :=
   match t with bag m n P =>
     (* Do rvar renaming *)
-    let P1 := ready_body_rvar N_APP n r_arg P in
-    (* Do fvar renaming, casing on whether the lambda 
-        and application reside in the same scope *)
-    TODO
+    let n_app := apply_at_hole_scope get_rvars_Et Et in
+    let P' := ready_body_rvar n_app n r_arg P in
+    (* Do fvar renaming *)
+    let m_app := apply_at_hole_scope get_fvars_Et Et in
+    ready_body_fvar_same_scope m_app m P'
+  end.
+
+Definition ready_body_diff_scope (Et : EC_term) (t : term) (r_arg : nat) : proc :=
+  match t with bag m n P =>
+    (* Do rvar renaming *)
+    let n_app := apply_at_hole_scope get_rvars_Et Et in
+    let P' := ready_body_rvar n_app n r_arg P in
+    (* Do fvar renaming *)
+    let m_app := apply_at_hole_scope get_fvars_Et Et in
+    let m_inner := bound_fvars_before_hole_scope Et in
+    ready_body_fvar_diff_scope m_inner m_app m P'
   end.
 
 
 
+(* Helper functions for garbage collecting functions *)
+
+(* Returns true if P contains a call to f, false otherwise *)
+Fixpoint contains_fvar_call f P :=
+  match P with
+  | def _ (lam (bag m _ P')) => contains_fvar_call (m + f) P'
+  | par P1 P2 => contains_fvar_call f P1 || contains_fvar_call f P2
+  | app f' _ => f =? f'
+  | _ => false
+  end.
+
+(* Returns true if Et contains no call to f, assuming f is bound in the 
+   hole scope of Et. Returns false otherwise. *)
+Definition can_remove_function f Et :=
+  let P := get_proc ((hole_scope Et) <=[ nul ]) in
+  negb (contains_fvar_call f P).
 
 
 
-(* Applies a function (lam t) with argument r_arg,
-   for filling EP (whose hole is the application site).
-    - Et is the context of (lam t) and EP (used for determing the free fvars in t)
-    - EP is the remaining context for the application site
-    - t is the lambda's term
-    - r_arg is the argument    *)
-Definition apply_function (Et : EC_term) (EP : EC_proc) (t : term) (r_arg : nat) : proc :=
-  let P := ready_body Et EP t r_arg in
-  TODO
-.
 
 
+
+
+(* Small Step *)
               
 Inductive prim_step : term -> term -> Prop :=
 | step_par_nul :    (*  Et <=[ P | nul ]  -->  Et <=[ P ]  *)
@@ -1964,34 +2055,66 @@ Inductive prim_step : term -> term -> Prop :=
       (Et <=[ par (def r (tup r1 r2)) (def r (tup r1' r2')) ])
       ((tuple_cut_hole_scope Et r1 r2 r1' r2') <=[ nul ])
       
-| step_app :    (*  Et <=[ rf <- lam r'. t | rf <- ?f | EP <=[ f r ] ]  *)
-  forall Et EP t f f' rf r,    (*  -->  Et <=[ '' | '' | EP <=[ fresh_body(t){r=r'} ] ]  *)
-    (* let Q' := (freshen_body m n r' P) in *)
-    (* NEED TO CONSTRIN f = f' *)
+| step_app_same_scope :    (*  Et <=[ rf <- lam r'. t | rf <- ?f | f r ]  *)
+  forall Et t f rf r,    (*  -->  Et <=[ '' | '' | fresh_body(t){r=r'} ]  *)
+      (* Get the freshened and applied body *)
+    let new_body := ready_body_same_scope Et t r in
+      (* Shift the fvars in the application's scope *)
+    let Et_shifted := add_fvars_hole_scope (get_fvars t) Et in
     prim_step
-    (Et <=[ (par (par
-                (def rf (lam t))
-                (def rf (bng f)))
-                (EP <=[ app f' r ]p)) ])
-    (Et <=[ (par (par
-                (def rf (lam t))
-                (def rf (bng f)))
-                (apply_function Et EP t r)) ])
-  .
+    (Et         <=[ (par (app f r)
+                    (par (def rf (lam t))
+                         (def rf (bng f)))) ])
+    (Et_shifted <=[ (par (new_body)
+                    (par (def rf (lam t))
+                         (def rf (bng f)))) ])
+      
+| step_app_diff_scope :    (*  Et' <=[ rf <- lam r'. t | rf <- ?f | Et <=[ f r ] ]  *)
+  forall Et Et' t f rf rl r,    (*  -->  Et' <=[ '' | '' | Et <=[ fresh_body(t){r=r'} ] ]  *)
+      (* Ensure the fvars in the definition and application scopes agree *)
+    let f' := f + (bound_fvars_to_hole Et) in
+      (* Get the freshened and applied body *)
+    let new_body := ready_body_diff_scope Et t r in
+      (* Shift the fvars in the application's scope *)
+    let Et_shifted := add_fvars_hole_scope (get_fvars t) Et in
+    prim_step
+    (Et' <=[ (par (def rl (lam (Et         <=[ app f' r ])))
+             (par (def rf (lam t))
+                  (def rf (bng f)))) ])
+    (Et' <=[ (par (def rl (lam (Et_shifted <=[ new_body ])))
+             (par (def rf (lam t))
+                  (def rf (bng f)))) ])
+
+| step_remove_function :
+  forall Et t f rf,
+    can_remove_function f Et = true ->
+    prim_step
+    (Et <=[ (par (def rf (lam t))
+                (def rf (bng f))) ])
+    (Et <=[ nul ])
+.
+
+
+
+Lemma 
+
+Lemma wf_prim_step_nul :
+  forall m n Et P,
+    wf_term m n (Et <=[ par P nul ]) ->
+    wf_term m n (Et <=[ P ]).
+Proof.
+  intros. inversion H; subst; clear H.
+Qed.
 
 
 Lemma wf_prim_step :
-  forall m n (G: lctxt m) t t',
-    wf_term m n G (zero n) t ->
+  forall m n t t',
+    wf_term m n t ->
     prim_step t t' ->
-    wf_term m n G (zero n) t'.
+    wf_term m n t'.
 Proof.
-  intros.
-  inversion H0; subst; clear H0.
-  - eapply wf_prim_step_emp; eauto.
-  - eapply wf_prim_step_tup; eauto.
-  - eapply wf_prim_step_app; eauto.
-Qed.    
+  intros. inversion H0; subst; clear H0.
+Admitted.    
 
 
 Inductive  step : nat -> nat -> term -> term -> Prop :=
