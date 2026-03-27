@@ -720,41 +720,24 @@ Proof.
   - apply H; auto. reflexivity.
 Qed.  
 
-(* #[global] Instance Proper_wf_term {m n:nat}: Proper ((@ctxt_eq nat m) ==> (@ctxt_eq nat n) ==> seq_term ==> iff) (wf_term m n).
-Proof.
-  repeat red; intros; subst.
-  split; intros.
-  - eapply tpo_equiv_wf; eauto.
-    eapply wf_seq_term; eauto.
-  - symmetry in H.
-    symmetry in H0.
-    symmetry in H1.
-    eapply tpo_equiv_wf; eauto.
-    eapply wf_seq_term; eauto.
-Qed.   *)
-
-#[global] Instance Proper_wf_term_proc {m n : nat} : Proper ((@ctxt_eq nat m) ==> (@ctxt_eq nat n) ==> seq_proc ==> iff) (wf_proc m n).
+#[global] Instance Proper_wf_proc {m n : nat} : Proper ((@ctxt_eq nat m) ==> (@ctxt_eq nat n) ==> seq_proc ==> iff) (wf_proc m n).
 Proof.
   repeat red; intros; subst.
   split; intros.
   - eapply tpo_equiv_wf; eauto.
     eapply wf_seq_proc; eauto.
-  - symmetry in H.
-    symmetry in H0.
-    symmetry in H1.
+  - symmetry in H, H0, H1.
     eapply tpo_equiv_wf; eauto.
     eapply wf_seq_proc; eauto.
 Qed.
 
-#[global] Instance Proper_wf_term_oper {m n : nat} : Proper ((@ctxt_eq nat m) ==> (@ctxt_eq nat n) ==> seq_oper ==> iff) (wf_oper m n).
+#[global] Instance Proper_wf_oper {m n : nat} : Proper ((@ctxt_eq nat m) ==> (@ctxt_eq nat n) ==> seq_oper ==> iff) (wf_oper m n).
 Proof.
   repeat red; intros; subst.
   split; intros.
   - eapply tpo_equiv_wf; eauto.
     eapply wf_seq_oper; eauto.
-  - symmetry in H.
-    symmetry in H0.
-    symmetry in H1.
+  - symmetry in H, H0, H1.
     eapply tpo_equiv_wf; eauto.
     eapply wf_seq_oper; eauto.
 Qed.
@@ -1541,7 +1524,7 @@ Qed.  *)
 
 
 (* Two rvar contexts are "rvar-closed equivalent" if their bindings are equal mod 2 *)
-Definition rvar_closed_eq n (D1 D2 : lctxt n) :=
+(* Definition rvar_closed_eq n (D1 D2 : lctxt n) :=
   forall x, x < n -> D1 x = D2 x \/ (D1 x = 0 /\ D2 x = 2) \/ (D1 x = 2 /\ D2 x = 0).
 
 Infix "≡[ n ]rc" := (rvar_closed_eq n) (at level 70).
@@ -1573,7 +1556,7 @@ Proof.
   split; intros.
   - eapply transitivity. symmetry. apply H. eapply transitivity. apply H1. apply H0.
   - eapply transitivity. apply H. eapply transitivity. apply H1. symmetry. apply H0.
-Qed.
+Qed. *)
 
 (* 
 (* Rvar-closed equivalence on rvar contexts preserves well-formedness *)
@@ -1603,7 +1586,7 @@ Qed.   *)
 
 
 
-(* Extending Renamings ---------------------------------------------------------- *)
+(* Extending Renamings and Contexts ---------------------------------------------------------- *)
 
 Ltac lia_destruct :=
   repeat match goal with
@@ -1686,6 +1669,10 @@ Definition strengthen_rvar_proc n x P : proc := rename_rvar_proc (strengthen n x
 Definition retract n x y : ren (y + 1 + n) (y + n) :=
   @ren_compose (y + 1 + n) (y + 1 + n) _ (rename_var y x) (strengthen n y).
 Definition retract_rvar_proc n x y P := rename_rvar_proc (retract n x y) P.
+
+
+
+(* Definition set *)
 
 
 
@@ -1966,8 +1953,10 @@ with wf_EC_proc : forall (m n m_hol n_hol:nat),
     lctxt m -> lctxt n -> lctxt m_hol -> lctxt n_hol -> EC_proc -> Prop :=
 | wf_Ehol :
   forall m n
-    (G : lctxt m) (D : lctxt n),
-    wf_EC_proc m n m n G D G D Ehol
+    (G G_hol: lctxt m) (D D_hol: lctxt n)
+    (HG : G ≡[m] G_hol)
+    (HD : D ≡[n] D_hol),
+    wf_EC_proc m n m n G D G_hol D_hol Ehol
 
 | wf_Epar :
   forall m n m_hol n_hol
@@ -2004,50 +1993,35 @@ Lemma fill_EC_wf_pres :
       (forall (m n m_hol n_hol:nat) (G_hol : lctxt m_hol) (D_hol : lctxt n_hol)
             (Et : EC_term), 
         wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
-        forall (P : proc) (D_hol' : lctxt n_hol),
-          D_hol ≡[n_hol]rc D_hol' ->
-          wf_proc m_hol n_hol G_hol D_hol' P ->
+        forall (P : proc),
+          wf_proc m_hol n_hol G_hol D_hol P ->
         wf_term m n (Et <=[ P ]))
   /\  (forall (m n m_hol n_hol:nat) (G : lctxt m) (D : lctxt n)
             (G_hol : lctxt m_hol) (D_hol : lctxt n_hol) (EP : EC_proc), 
         wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP ->
-        forall (P : proc) (D_hol' : lctxt n_hol),
-          D_hol ≡[n_hol]rc D_hol' ->
-          wf_proc m_hol n_hol G_hol D_hol' P ->
-        exists D', 
-        D ≡[n]rc D' /\
-        wf_proc m n G D' (EP <=[ P ]p)).
+        forall (P : proc),
+          wf_proc m_hol n_hol G_hol D_hol P ->
+        wf_proc m n G D (EP <=[ P ]p)).
 Proof.
   apply wf_EC_ind; intros.
     (* Most cases are immediate or by IH *)
-  all: try solve [try econstructor; try apply WFP2; auto].
-  - destruct (H _ _ H0 H1) as (D' & H2 & H3); clear H.
-    assert (exists D0, D' ≡[ n + n' ] D0 ⊗ flat_ctxt 1 n').
-    { (* HELP *)
-      destruct (Nat.eqb_spec (D' x) ((D ⊗ flat_ctxt 1 n') x)).
-      eexists. unfold ctxt_eq; intros. destruct (H2 _ H) as [H4 | [H4 | H4]].
-      destruct (Nat.eqb_spec (D' x) ((D ⊗ flat_ctxt 1 n') x)).
-    - apply H4. }
-    apply wf_bag with (G := G) (D := D'); auto. apply w.
-  - simpl. 
+  all: try solve [try econstructor; try apply WFP2; try rewrite HG, HD; auto].
     (* Edeflam *)
   - simpl. apply wf_def with (D' := zero n); auto.
     + rewrite sum_zero_r. auto.
     + apply wf_lam; auto. reflexivity.
 Qed.
 
-
 Lemma fill_EC_wf_pres_term : (forall (m n m_hol n_hol:nat) 
-(G_hol : lctxt m_hol) (D_hol : lctxt n_hol) (Et : EC_term), 
-wf_EC_term m n m_hol n_hol G_hol D_hol Et -> forall (P : proc),
-wf_proc m_hol n_hol G_hol D_hol P -> wf_term m n (Et <=[ P ])).
+  (G_hol : lctxt m_hol) (D_hol : lctxt n_hol) (Et : EC_term), 
+  wf_EC_term m n m_hol n_hol G_hol D_hol Et -> forall (P : proc),
+  wf_proc m_hol n_hol G_hol D_hol P -> wf_term m n (Et <=[ P ])).
 Proof. apply fill_EC_wf_pres. Qed.
-
 Lemma fill_EC_wf_pres_proc : (forall (m n m_hol n_hol:nat) 
-(G : lctxt m) (D : lctxt n) (G_hol : lctxt m_hol) 
-(D_hol : lctxt n_hol) (EP : EC_proc), 
-wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP -> forall (P : proc),
-wf_proc m_hol n_hol G_hol D_hol P -> wf_proc m n G D (EP <=[ P ]p)).
+  (G : lctxt m) (D : lctxt n) (G_hol : lctxt m_hol) 
+  (D_hol : lctxt n_hol) (EP : EC_proc), 
+  wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP -> forall (P : proc),
+  wf_proc m_hol n_hol G_hol D_hol P -> wf_proc m n G D (EP <=[ P ]p)).
 Proof. apply fill_EC_wf_pres. Qed.
 
 
@@ -2075,7 +2049,7 @@ Proof.
     (* Ebag *)
   - inversion H0; subst. drill_by_IH H WFP.
     (* Ehol *)
-  - exists m, n, G, D. split; auto. econstructor.
+  - exists m, n, G, D. split; auto. econstructor; reflexivity.
     (* Edeflam *)
   - inversion H0; inversion WFO; existT_eq; subst. drill_by_IH H WFT.
     rewrite HD, HD0, sum_zero_r; reflexivity.
@@ -2083,6 +2057,94 @@ Proof.
   - inversion H0; existT_eq; subst. drill_by_IH H WFP1.
 Qed.
 
+
+(* Prove that well-formedness respects context equivalence. *)
+Lemma EC_equiv_wf :
+(* The first element is trivial, but allows using wf_tpo_ind *)
+  (forall m n m_hol n_hol G_hol1 D_hol1 Et,
+    wf_EC_term m n m_hol n_hol G_hol1 D_hol1 Et ->
+    forall G_hol2 D_hol2,
+      G_hol1 ≡[m_hol] G_hol2 ->
+      D_hol1 ≡[n_hol] D_hol2 ->
+    wf_EC_term m n m_hol n_hol G_hol2 D_hol2 Et)
+  /\
+  (forall m n m_hol n_hol G1 D1 G_hol1 D_hol1 EP,
+    wf_EC_proc m n m_hol n_hol G1 D1 G_hol1 D_hol1 EP ->
+    forall G2 D2 G_hol2 D_hol2,
+      G1 ≡[m] G2 ->
+      D1 ≡[n] D2 ->
+      G_hol1 ≡[m_hol] G_hol2 ->
+      D_hol1 ≡[n_hol] D_hol2 ->
+    wf_EC_proc m n m_hol n_hol G2 D2 G_hol2 D_hol2 EP).
+Proof.
+  apply wf_EC_ind; intros.
+  (* All cases are by transitivity (the rewrites).
+     Most cases are one transitivity and IH *)
+  all: try solve [
+    try rewrite H0, H1 in *; econstructor; eauto; try (eapply H; auto; reflexivity)
+  ].
+  (* Ehol is by two transitivities. *)
+  - econstructor; eauto.
+    + rewrite <- H, HG, H1; reflexivity.
+    + rewrite <- H0, HD, H2; reflexivity.
+Qed.
+
+#[global] Instance Proper_wf_EC_term {m n m_hol n_hol: nat}: Proper ((@ctxt_eq nat m_hol) ==> (@ctxt_eq nat n_hol) ==> eq ==> iff) (wf_EC_term m n m_hol n_hol).
+Proof.
+  repeat red; intros; subst.
+  split; intros.
+  - eapply EC_equiv_wf; eauto.
+  - symmetry in H, H0.
+    eapply EC_equiv_wf; eauto.
+Qed.
+
+#[global] Instance Proper_wf_EC_proc {m n m_hol n_hol: nat} : Proper ((@ctxt_eq nat m) ==> (@ctxt_eq nat n) ==> (@ctxt_eq nat m_hol) ==> (@ctxt_eq nat n_hol) ==> eq ==> iff) (wf_EC_proc m n m_hol n_hol).
+Proof.
+  repeat red; intros; subst.
+  split; intros.
+  - eapply EC_equiv_wf; eauto.
+  - symmetry in H, H0, H1, H2.
+    eapply EC_equiv_wf; eauto.
+Qed.
+
+
+Lemma rem_hole_rvar_EC_wf : 
+  (forall (m n m_hol n_hol:nat) (G_hol : lctxt m_hol) (D_hol : lctxt n_hol)
+        (Et : EC_term),
+    wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
+    forall (r : rvar) (D_hol' : lctxt n_hol),
+      D_hol ≡[n_hol] D_hol' ⨥ n_hol[r ↦ 2] ->
+      r < n_hol ->
+      D_hol' r = 0 ->
+    wf_EC_term m n m_hol n_hol G_hol D_hol' Et)
+  /\  
+  (forall (m n m_hol n_hol:nat) (G : lctxt m) (D : lctxt n)
+        (G_hol : lctxt m_hol) (D_hol : lctxt n_hol) (EP : EC_proc), 
+    wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP ->
+    forall (r : rvar) (D_hol' : lctxt n_hol),
+      D_hol ≡[n_hol] D_hol' ⨥ n_hol[r ↦ 2] ->
+      r < n_hol ->
+      D_hol' r = 0 ->
+    (wf_EC_proc m n m_hol n_hol G D G_hol D_hol' EP)
+    \/
+    (n = n_hol /\ 
+    exists (D' : lctxt n),
+      D ≡[n] D' ⨥ n[r ↦ 2] /\
+      D' r = 0 /\
+    wf_EC_proc m n m_hol n_hol G D' G_hol D_hol' EP)).
+Proof.
+  apply wf_EC_ind; intros.
+  - destruct (H r D_hol' H0 H1 H2); clear H. 
+    + econstructor; eauto.
+    + destruct H3 as (H3 & D' & H4 & H5 & H6); subst.
+      assert (exists (D0 : lctxt n), D' ≡[n + n'] D0 ⊗ flat_ctxt 1 n' 
+                                  /\ D ≡[n] (D0 ⨥ n[r ↦ 2]) 
+                                  /\ D0 r = 0).
+      admit.
+      destruct H as (D0 & HD1 & HD2 & HD3). rewrite HD1 in *.
+      apply wf_Ebag with (G := G) (D := D0); auto; subst.
+
+Qed.
 
 
 
@@ -2254,6 +2316,20 @@ Definition can_remove_function f Et :=
 
 
 
+Lemma foo : 
+( forall m n m_hol n_hol G_hol D_hol Et,
+  wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
+  (D_hol r = 2) ->
+  let Et' := remove r Et in
+  EC_wf m (n - 1) m_hol (n_hol - 1) G_hol (remove r D_hol) Et')
+  /\
+( forall m n m_hol n_hol G D G_hol D_hol EP X,
+  wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP ->
+  (D_hol r = X) ->
+  let Et' := remove r Et in
+  EC_wf m (n - 1) m_hol (n_hol - 1) G_hol (remove r D_hol) Et')
+
+  
 
 
 
