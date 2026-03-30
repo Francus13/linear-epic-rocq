@@ -467,6 +467,16 @@ Proof.
   apply H.
 Qed.  
 
+
+Lemma delta_ctxt_eq_app_inv : forall n m x y (c1 : lctxt n) (c2 : lctxt m),
+  ((n + m)[x ↦ y] ≡[n + m] c1 ⊗ c2) -> 
+    (n[x ↦ y] ≡[n] c1 /\ zero m ≡[m] c2) \/
+    (zero n ≡[n] c1 /\ m[x ↦ y] ≡[m] c2).
+Proof.
+
+Qed.
+
+
 Definition SUM {n} (l : list (lctxt n)) : lctxt n :=
   List.fold_right sum (zero n) l.
 

@@ -2137,12 +2137,29 @@ Proof.
   - destruct (H r D_hol' H0 H1 H2); clear H. 
     + econstructor; eauto.
     + destruct H3 as (H3 & D' & H4 & H5 & H6); subst.
+      symmetry in H0; rewrite sum_commutative in H0.
+      apply delta_sum_ctxt_eq_inv in H0. destruct H0 as (D0 & -> & H).
+      apply sum_app_inv_ctxt in H4. 
+      destruct H4 as (D1 & D1r & D2 & D2r & HD1 & HD2 & HD3 & HD4).
+      rewrite H, <- HD3 in WFP; clear H.
+      apply wf_Ebag with (G := G) (D := D1); auto; subst.
+      * intros. unfold ctxt_eq in HD3; specialize HD3 with x. 
+        specialize UD with x. rewrite <- HD3 in UD; auto.
+        destruct (Nat.eqb_spec x r).
+        -- subst. admit.
+        -- 
+      -- right; subst. assert (D1r r = 2).
+      { unfold ctxt_eq in HD2. specialize HD2 with r.  } 
+
+
+
       assert (exists (D0 : lctxt n), D' ≡[n + n'] D0 ⊗ flat_ctxt 1 n' 
                                   /\ D ≡[n] (D0 ⨥ n[r ↦ 2]) 
                                   /\ D0 r = 0).
       admit.
-      destruct H as (D0 & HD1 & HD2 & HD3). rewrite HD1 in *.
-      apply wf_Ebag with (G := G) (D := D0); auto; subst.
+      destruct H as (D0 & HD1 & HD2 & HD3). rewrite HD1 in *; auto.
+      intros. specialize UD with x. unfold ctxt_eq in HD2. specialize HD2 with x.
+      rewrite HD2 in UD; auto. destruct (UD H).
 
 Qed.
 
