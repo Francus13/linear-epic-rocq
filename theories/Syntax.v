@@ -2108,62 +2108,6 @@ Proof.
 Qed.
 
 
-Lemma rem_hole_rvar_EC_wf : 
-  (forall (m n m_hol n_hol:nat) (G_hol : lctxt m_hol) (D_hol : lctxt n_hol)
-        (Et : EC_term),
-    wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
-    forall (r : rvar) (D_hol' : lctxt n_hol),
-      D_hol ≡[n_hol] D_hol' ⨥ n_hol[r ↦ 2] ->
-      r < n_hol ->
-      D_hol' r = 0 ->
-    wf_EC_term m n m_hol n_hol G_hol D_hol' Et)
-  /\  
-  (forall (m n m_hol n_hol:nat) (G : lctxt m) (D : lctxt n)
-        (G_hol : lctxt m_hol) (D_hol : lctxt n_hol) (EP : EC_proc), 
-    wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP ->
-    forall (r : rvar) (D_hol' : lctxt n_hol),
-      D_hol ≡[n_hol] D_hol' ⨥ n_hol[r ↦ 2] ->
-      r < n_hol ->
-      D_hol' r = 0 ->
-    (wf_EC_proc m n m_hol n_hol G D G_hol D_hol' EP)
-    \/
-    (n = n_hol /\ 
-    exists (D' : lctxt n),
-      D ≡[n] D' ⨥ n[r ↦ 2] /\
-      D' r = 0 /\
-    wf_EC_proc m n m_hol n_hol G D' G_hol D_hol' EP)).
-Proof.
-  apply wf_EC_ind; intros.
-  - destruct (H r D_hol' H0 H1 H2); clear H. 
-    + econstructor; eauto.
-    + destruct H3 as (H3 & D' & H4 & H5 & H6); subst.
-      symmetry in H0; rewrite sum_commutative in H0.
-      apply delta_sum_ctxt_eq_inv in H0. destruct H0 as (D0 & -> & H).
-      apply sum_app_inv_ctxt in H4. 
-      destruct H4 as (D1 & D1r & D2 & D2r & HD1 & HD2 & HD3 & HD4).
-      rewrite H, <- HD3 in WFP; clear H.
-      apply wf_Ebag with (G := G) (D := D1); auto; subst.
-      * intros. unfold ctxt_eq in HD3; specialize HD3 with x. 
-        specialize UD with x. rewrite <- HD3 in UD; auto.
-        destruct (Nat.eqb_spec x r).
-        -- subst. admit.
-        -- 
-      -- right; subst. assert (D1r r = 2).
-      { unfold ctxt_eq in HD2. specialize HD2 with r.  } 
-
-
-
-      assert (exists (D0 : lctxt n), D' ≡[n + n'] D0 ⊗ flat_ctxt 1 n' 
-                                  /\ D ≡[n] (D0 ⨥ n[r ↦ 2]) 
-                                  /\ D0 r = 0).
-      admit.
-      destruct H as (D0 & HD1 & HD2 & HD3). rewrite HD1 in *; auto.
-      intros. specialize UD with x. unfold ctxt_eq in HD2. specialize HD2 with x.
-      rewrite HD2 in UD; auto. destruct (UD H).
-
-Qed.
-
-
 
 
 
@@ -2331,22 +2275,8 @@ Definition can_remove_function f Et :=
   let P := get_proc ((hole_scope Et) <=[ nul ]) in
   negb (contains_fvar_call f P).
 
-
-
-Lemma foo : 
-( forall m n m_hol n_hol G_hol D_hol Et,
-  wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
-  (D_hol r = 2) ->
-  let Et' := remove r Et in
-  EC_wf m (n - 1) m_hol (n_hol - 1) G_hol (remove r D_hol) Et')
-  /\
-( forall m n m_hol n_hol G D G_hol D_hol EP X,
-  wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP ->
-  (D_hol r = X) ->
-  let Et' := remove r Et in
-  EC_wf m (n - 1) m_hol (n_hol - 1) G_hol (remove r D_hol) Et')
-
   
+
 
 
 
@@ -2412,6 +2342,11 @@ Inductive prim_step : term -> term -> Prop :=
 .
 
 
+
+
+
+(* Preservation of functions for prim_step *)
+
 Ltac drill_wf H := apply drill_term_wf_pres in H;
   destruct H as (m_hol & n_hol & G_hol & D_hol & H1 & H2).
 
@@ -2420,6 +2355,88 @@ repeat match goal with
 | H : ?C1 ≡[ ?n ] ?C2 |- _ => rewrite H in *; clear H
 end.
 
+
+(* Removing a resource requirement from the hole (changing 2 uses to 0 uses) 
+   preserves EC well-formedness *)
+Lemma rem_hole_rvar_EC_wf : 
+  (forall (m n m_hol n_hol:nat) (G_hol : lctxt m_hol) (D_hol : lctxt n_hol)
+        (Et : EC_term),
+    wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
+    forall (r : rvar) (D_hol' : lctxt n_hol),
+      D_hol ≡[n_hol] D_hol' ⨥ n_hol[r ↦ 2] ->
+      r < n_hol ->
+      D_hol' r = 0 ->
+    wf_EC_term m n m_hol n_hol G_hol D_hol' Et)
+  /\  
+  (forall (m n m_hol n_hol:nat) (G : lctxt m) (D : lctxt n)
+        (G_hol : lctxt m_hol) (D_hol : lctxt n_hol) (EP : EC_proc), 
+    wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP ->
+    forall (r : rvar) (D_hol' : lctxt n_hol),
+      D_hol ≡[n_hol] D_hol' ⨥ n_hol[r ↦ 2] ->
+      r < n_hol ->
+      D_hol' r = 0 ->
+    (wf_EC_proc m n m_hol n_hol G D G_hol D_hol' EP)
+    \/
+    (n = n_hol /\ 
+    exists (D' : lctxt n),
+      D ≡[n] D' ⨥ n[r ↦ 2] /\
+    wf_EC_proc m n m_hol n_hol G D' G_hol D_hol' EP)).
+Proof.
+  apply wf_EC_ind; intros.
+  (* Ebag *)
+  - destruct (H r D_hol' H0 H1 H2); clear H. 
+    + econstructor; eauto.
+    + destruct H3 as (H3 & D' & H4 & H5); subst.
+      symmetry in H0; rewrite sum_commutative in H0.
+      apply delta_sum_ctxt_eq_inv in H0. destruct H0 as (D0 & -> & H).
+      apply sum_app_inv_ctxt in H4. 
+      destruct H4 as (D1 & D1r & D2 & D2r & HD1 & HD2 & HD3 & HD4).
+      rewrite H, <- HD3 in WFP; clear H.
+      apply delta_ctxt_eq_app_inv in HD2. 
+      apply wf_Ebag with (G := G) (D := D1); auto; subst.
+      * intros. unfold ctxt_eq in HD3; specialize HD3 with x. rewrite lctxt_sum in HD3. 
+        specialize UD with x. rewrite <- HD3 in UD; auto.
+        destruct HD2; destruct H0; clear H3.
+        all: unfold ctxt_eq in H0; specialize H0 with x.
+        all: rewrite <- H0 in UD; try lia; clear H0.
+        all: destruct (UD H); unfold delta, zero, flat_ctxt in H0.
+        all: destruct (lt_dec r n); destruct (Nat.eq_dec r x); lia.
+      * rewrite <- HD4. rewrite HD1 in H5.
+        destruct HD2; destruct H; clear H.
+        -- rewrite <- H0, sum_zero_r. assumption.
+        -- destruct (Nat.eq_dec n' 0); subst.
+           ++ simpl in *. rewrite Nat.add_0_r in *. 
+           rewrite (ctxt_app_l D1 (D2 ⨥ D2r)).
+           rewrite (ctxt_app_l D1 D2) in H5. assumption.
+           ++ assert (1 > 1).
+              { rewrite <- H0 in HD4. unfold flat_ctxt, ctxt_eq in HD4.
+                rewrite <- (HD4 (r - n)) at 1; try lia.
+                unfold delta, sum. 
+                destruct (lt_dec (r - n) n'); destruct (Nat.eq_dec (r - n) (r - n)); lia. }
+              lia.
+  (* Ehol *)
+  - right; split; auto. exists D_hol'; repeat split; auto.
+    + transitivity D_hol; auto.
+    + constructor; auto; reflexivity.
+  (* Epar *)
+  - destruct (H r D_hol'); auto.
+    + left. econstructor; eauto.
+    + right. destruct H3 as (H3 & D' & H4 & H5).
+      split; auto. exists (D' ⨥ D2); repeat split.
+      * rewrite <- sum_assoc, (sum_commutative D2), sum_assoc. 
+        rewrite HD; rewrite H4. reflexivity.
+      * econstructor; eauto; reflexivity.
+  (* Elamdef *)
+  - left. constructor; auto. eapply H; eauto.
+Qed.
+
+
+
+
+
+
+
+(* Preservation of prim_step and step *)
 
 Lemma wf_prim_step_nul :
   forall m n Et P,

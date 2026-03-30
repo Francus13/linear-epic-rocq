@@ -165,6 +165,7 @@ Proof.
       * lia.
       * replace (x - (n + m)) with (x - n - m) by lia.
         reflexivity.
+  Unset Printing All.
 Qed.        
 
 #[global] Instance Proper_ctxt_app {X n m} : Proper ((@ctxt_eq X n) ==> (@ctxt_eq X m) ==> (@ctxt_eq X (n +m))) (@ctxt_app X n m).
@@ -471,9 +472,34 @@ Qed.
 Lemma delta_ctxt_eq_app_inv : forall n m x y (c1 : lctxt n) (c2 : lctxt m),
   ((n + m)[x ↦ y] ≡[n + m] c1 ⊗ c2) -> 
     (n[x ↦ y] ≡[n] c1 /\ zero m ≡[m] c2) \/
-    (zero n ≡[n] c1 /\ m[x ↦ y] ≡[m] c2).
+    (zero n ≡[n] c1 /\ m[(x - n) ↦ y] ≡[m] c2).
 Proof.
-
+  intros. unfold ctxt_eq, delta, zero, flat_ctxt, ctxt_app in *.
+  destruct (lt_dec x (n + m)).
+  - destruct (lt_dec x n).
+    + left; split; intros.
+      * rewrite (H x0); try lia.
+        destruct (lt_dec x0 n); lia.
+      * specialize H with (n + x0). 
+        destruct (lt_dec (n + x0) n); try lia.
+        destruct (Nat.eq_dec x (n + x0)); try lia.
+        assert (x0 = n + x0 - n) by lia. rewrite H1, H; lia.
+    + right; split; intros.
+      * specialize H with x0. 
+        destruct (lt_dec x0 n); try lia.
+        destruct (Nat.eq_dec x x0); lia.
+      * destruct (lt_dec (x - n) m); try lia.
+        specialize H with (n + x0).
+        destruct (lt_dec (n + x0) n); try lia.
+        assert (x0 = n + x0 - n) by lia. rewrite H1 at 2; clear H1.
+        destruct (Nat.eq_dec (x - n) x0); destruct (Nat.eq_dec x (n + x0)); lia.
+  - left; split; intros.
+    + destruct (lt_dec x n); try lia.
+      rewrite (H x0); try lia.
+      destruct (lt_dec x0 n); lia.
+    + rewrite (H (n + x0)); try lia.
+      destruct (lt_dec (n + x0) n); try lia.
+      assert (x0 = n + x0 - n) by lia. rewrite H1 at 2; lia.
 Qed.
 
 
