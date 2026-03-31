@@ -2108,6 +2108,40 @@ Proof.
 Qed.
 
 
+(* The rvar hole context has a maximum binding of 2 *)
+Lemma max_rvar_hole_EC_wf :
+      (forall (m n m_hol n_hol:nat) (G_hol : lctxt m_hol) (D_hol : lctxt n_hol)
+            (Et : EC_term), 
+        wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
+        forall r,
+          r < n_hol ->
+        D_hol r <= 2)
+  /\  (forall (m n m_hol n_hol:nat) (G : lctxt m) (D : lctxt n)
+            (G_hol : lctxt m_hol) (D_hol : lctxt n_hol) (EP : EC_proc), 
+        wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP ->
+        forall r,
+          r < n_hol ->
+        (D_hol r <= 2)
+    \/  (n = n_hol /\ 
+          (D r <= 2 ->
+        D_hol r <= 2))).
+Proof.
+  apply wf_EC_ind; intros.
+  (* Ebag *)
+  - destruct (H r); auto. destruct H1. apply H2. 
+    unfold ctxt_app, flat_ctxt.
+    destruct (lt_dec r n); auto. destruct (UD r); lia.
+  (* Ehol *)
+  - rewrite <- HD; auto.
+  (* Epar *)
+  - destruct (H r); auto. destruct H1; subst.
+    right; split; auto; intros.
+    rewrite HD in H1; auto. unfold sum in H1; lia.
+  (* Elamdef *)
+  - auto.
+Qed.
+
+
 
 
 
@@ -2431,6 +2465,24 @@ Proof.
 Qed.
 
 
+Lemma tuple_cut_ren_EC_wf : 
+  forall (m n m_hol n_hol:nat) (G_hol : lctxt m_hol) (D_hol : lctxt n_hol)
+        (Et : EC_term),
+    wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
+    forall r1 r2 r1' r2',
+      r1 < n_hol -> r2 < n_hol -> r1' < n_hol -> r2' < n_hol -> 
+    wf_EC_term m n m_hol n_hol G_hol D_hol 
+        (tuple_cut_hole_scope Et r1 r2 r1' r2').
+Proof.
+  intros. inversion H; existT_eq; subst.
+Qed.
+
+
+
+
+
+
+
 
 
 
@@ -2453,11 +2505,48 @@ Lemma wf_prim_step_emp :
     wf_term m n (Et <=[ par (def r emp) (def r emp) ]) ->
     wf_term m n (Et <=[ nul ]).
 Proof.
-  intros. drill_wf H. eapply fill_EC_wf_pres_term; eauto.
+  intros. drill_wf H.
   inversion H1; inversion WFP1; inversion WFP2; inversion WFO; 
-    inversion WFO0; existT_eq; subst; rewrite_ctxt_equivs.
-  repeat rewrite sum_zero_r; constructor; reflexivity.
+    inversion WFO0; existT_eq; subst; rewrite_ctxt_equivs; 
+    clear H1 WFP1 WFP2 WFO WFO0.
+  repeat rewrite sum_zero_r in H2.
+  unfold one in H2; rewrite delta_sum in H2; simpl in H2.
+  assert ((zero n_hol) r = 0) as Z by auto.
+  eapply rem_hole_rvar_EC_wf in H2; try exact Z; auto.
+  - eapply fill_EC_wf_pres_term; eauto. constructor; reflexivity.
+  - rewrite sum_zero_l; reflexivity.
 Qed.
+
+
+Lemma wf_prim_step_tup :
+  forall m n Et r r1 r2 r1' r2',
+    wf_term m n (Et <=[ par (def r (tup r1 r2)) (def r (tup r1' r2')) ]) ->
+    wf_term m n ((tuple_cut_hole_scope Et r1 r2 r1' r2') <=[ nul ]).
+Proof.
+  intros. drill_wf H.
+  inversion H1; inversion WFP1; inversion WFP2; inversion WFO; 
+    inversion WFO0; existT_eq; subst; rewrite_ctxt_equivs; 
+    clear H1 WFP1 WFP2 WFO WFO0.
+  repeat rewrite sum_zero_r in *. 
+  unfold one in H2.
+  assert (forall c1 c2, ((n_hol [r ↦ 1] ⨥ c1) ⨥ (n_hol [r ↦ 1] ⨥ c2))
+                ≡[n_hol]  n_hol [r ↦ 2] ⨥ c1 ⨥ c2) as R.
+    { unfold delta, sum, ctxt_eq; intros. lia_goal. }
+  rewrite R in H2; clear R.
+  assert (((n_hol [r1 ↦ 1] ⨥ n_hol [r2 ↦ 1]) 
+         ⨥ (n_hol [r1' ↦ 1] ⨥ n_hol [r2' ↦ 1])) r = 0) as Z.
+    { eapply max_rvar_hole_EC_wf in H2. 
+      2: exact HR0.
+      unfold delta, sum in *.
+      destruct (lt_dec r n_hol); destruct (Nat.eq_dec r r); lia. }
+Admitted.
+  (* eapply rem_hole_rvar_EC_wf in H2; try exact Z; auto.
+  - eapply fill_EC_wf_pres_term; eauto. constructor; reflexivity.
+  - unfold delta, sum, ctxt_eq; intros; lia.
+
+
+
+Qed. *)
 
 
 Lemma wf_prim_step :
