@@ -1801,17 +1801,15 @@ Qed.
 Fixpoint pop_EC_scope_proc (EP : EC_proc) : EC_proc * EC_proc :=
   match EP with
   | Ehol => (Ehol, Ehol)    (* Hole is at the top scope *)
-  | Epar EP' P => match pop_EC_scope_proc EP' with
-                  | (EP1, EP2) => (Epar EP1 P, EP2)   (* Recurse *)
-                  end
+  | Epar EP' P => let (EP1, EP2) := pop_EC_scope_proc EP' in   (* Recurse *)
+                      (Epar EP1 P, EP2)
   | Edeflam _ _ => (Ehol, EP)    (* Split top and next scope *)
   end.
 
 Definition pop_EC_scope (Et : EC_term) : EC_term * EC_proc :=
   match Et with
-  | Ebag m n EP => match pop_EC_scope_proc EP with
-                   | (EP1, EP2) => (Ebag m n EP1, EP2)   (* Recurse *)
-                   end
+  | Ebag m n EP => let (EP1, EP2) := pop_EC_scope_proc EP in   (* Recurse *)
+                      (Ebag m n EP1, EP2)
   end.
 
 Definition top_scope Et := match pop_EC_scope Et with (Et', _) => Et' end.
@@ -1843,9 +1841,30 @@ Program Fixpoint split_hole_scope_builder (r : rvar) (Et_acc Et_cur : EC_term)
                 (Acc_inv ACC _)
   | _ => (Ebag 0 0 Ehol, Ehol) (* Cannot reach here *)
   end.
+Obligations of split_hole_scope_builder.
 Next Obligation. apply pop_EC_scope_reduces_hole_depth with (r := r'). 
     unfold next_scope_to_hole. rewrite <- Heq_anonymous. reflexivity. Qed.
 Next Obligation. split; intros; injection; discriminate. Qed.
+
+Print split_hole_scope_builder.
+
+
+(* Lemma split_hole_scope_builder_unfold :
+  forall r Et_acc Et_cur ACC,
+    split_hole_scope_builder r Et_acc Et_cur ACC = 
+  match pop_EC_scope Et_cur with
+  | (_, Ehol) => (Et_acc, Edeflam r Et_cur)
+  | (Et_next, Edeflam r' Et_rest) => 
+              split_hole_scope_builder r'
+                (Et_acc <=<[ Edeflam r Et_next ]) Et_rest 
+                (Acc_inv ACC (split_hole_scope_builder_obligation_1 
+                                  Et_cur Et_next r' Et_rest eq_refl))
+  | _ => (Ebag 0 0 Ehol, Ehol) (* Cannot reach here *)
+  end.
+Proof.
+  induction Et_cur.
+Qed. *)
+
 
 (* Applies pop_EC_scope until the "hole scope" is reached,
       separating the hole scope from the rest of the EC.
@@ -1918,6 +1937,98 @@ with rename_fvar_EC_term {m m'} (v : ren m m') (Et : EC_term) :=
   match Et with
   | Ebag m'' n EP => Ebag m'' n (rename_fvar_EC_proc (ren_shift m'' v) EP)
   end.
+
+
+
+(* Lemmas for EC functions *)
+
+Lemma pop_EC_scope_Ehol :
+      (forall (Et Et_top : EC_term),
+        pop_EC_scope Et = (Et_top, Ehol) ->
+        Et = Et_top)
+  /\  (forall (EP EP_top : EC_proc),
+        pop_EC_scope_proc EP = (EP_top, Ehol) ->
+        EP = EP_top).
+Proof.
+  apply EC_ind; intros.
+  - unfold pop_EC_scope in H0. destruct (pop_EC_scope_proc EP) eqn:Eq.
+    injection H0; intros; subst. 
+    rewrite (H e); auto.
+  - unfold pop_EC_scope_proc in H. injection H; auto.
+  - unfold pop_EC_scope_proc in H0. 
+    injection H0; intros; subst; auto.
+  - unfold pop_EC_scope_proc in H0. fold pop_EC_scope_proc in H0.   (* FRAN *)
+    destruct (pop_EC_scope_proc EP) eqn:Eq.
+    injection H0; intros; subst. 
+    rewrite (H e); auto.
+Qed.
+
+Lemma split_hole_scope_builder_no_Ehol :
+  forall Et_cur ACC r Et_acc Et_outer,
+  (split_hole_scope_builder r Et_acc Et_cur ACC) <> (Et_outer, Ehol).
+Proof.
+  intro. 
+  unfold not, split_hole_scope_builder; intros.
+  assert (
+      (fix split_hole_scope_builder
+      (r : rvar) (Et_acc Et_cur : EC_term) (ACC : Acc hole_depth_lt Et_cur) {struct ACC} :
+      EC_term * EC_proc :=
+      (let
+      (Et_next, e) as anonymous'
+      return (anonymous' = pop_EC_scope Et_cur -> EC_term * EC_proc) :=
+      pop_EC_scope Et_cur in
+      match e as e0 return ((Et_next, e0) = pop_EC_scope Et_cur -> EC_term * EC_proc)
+      with
+      | Ehol => fun _ : (Et_next, Ehol) = pop_EC_scope Et_cur => (Et_acc, Edeflam r
+      Et_cur)
+      | Edeflam r' Et_rest =>
+      fun Heq_anonymous : (Et_next, Edeflam r' Et_rest) = pop_EC_scope Et_cur =>
+      split_hole_scope_builder r' (Et_acc <=<[ Edeflam r Et_next]) Et_rest
+      (Acc_inv ACC
+      (split_hole_scope_builder_obligation_1 Et_cur Et_next r' Et_rest
+      Heq_anonymous))
+      | Epar EP P => fun _ : (Et_next, Epar EP P) = pop_EC_scope Et_cur =>
+      (Ebag 0 0 Ehol, Ehol)
+      end) eq_refl) r Et_acc Et_cur ACC
+    =
+      (let
+      (Et_next, e) as anonymous'
+      return (anonymous' = pop_EC_scope Et_cur -> EC_term * EC_proc) :=
+      pop_EC_scope Et_cur in
+      match e as e0 return ((Et_next, e0) = pop_EC_scope Et_cur -> EC_term * EC_proc)
+      with
+      | Ehol => fun _ : (Et_next, Ehol) = pop_EC_scope Et_cur => (Et_acc, Edeflam r
+      Et_cur)
+      | Edeflam r' Et_rest =>
+      fun Heq_anonymous : (Et_next, Edeflam r' Et_rest) = pop_EC_scope Et_cur =>
+      split_hole_scope_builder r' (Et_acc <=<[ Edeflam r Et_next]) Et_rest
+      (Acc_inv ACC
+      (split_hole_scope_builder_obligation_1 Et_cur Et_next r' Et_rest
+      Heq_anonymous))
+      | Epar EP P => fun _ : (Et_next, Epar EP P) = pop_EC_scope Et_cur =>
+      (Ebag 0 0 Ehol, Ehol)
+      end) eq_refl
+  ).
+  {
+    admit.
+  }
+  rewrite H0 in H; clear H0.
+  destruct (pop_EC_scope Et_cur).
+Qed.
+
+Lemma split_hole_scope_Ehol :
+  forall (Et Et_top : EC_term),
+    split_hole_scope Et = (Et_top, Ehol) ->
+    Et = Et_top.
+Proof.
+  unfold split_hole_scope; intros. destruct (pop_EC_scope Et) eqn:Eq.
+  destruct e0.
+  - injection H; intros; subst; auto.
+  - unfold split_hole_scope_builder in H. fold split_hole_scope_builder in H.
+    
+Qed.
+
+
 
 
 
@@ -2475,6 +2586,11 @@ Lemma tuple_cut_ren_EC_wf :
         (tuple_cut_hole_scope Et r1 r2 r1' r2').
 Proof.
   intros. inversion H; existT_eq; subst.
+  unfold tuple_cut_hole_scope, mutate_hole_scope; simpl. 
+  destruct (split_hole_scope (Ebag m0 n0 EP)) as (Et_outer & EP_hs) eqn:Eq.
+  induction EP_hs.
+  - unfold scoped_rvars_at_hole, case_hole_scope_at_top.
+      TODO.
 Qed.
 
 
