@@ -1762,7 +1762,7 @@ Definition hole_depth_lt (Et1 Et2 : EC_term) :=
 
 (* Every EC is accessible with hole_depth_lt.
    Used to prove well-foundedness of split_hole_scope. *)
-Lemma hole_depth_lt_wf : 
+Lemma hole_depth_lt_wf_helper : 
   (forall (Et : EC_term), Acc hole_depth_lt Et) /\
   (forall (EP : EC_proc) m n, Acc hole_depth_lt (Ebag m n EP)).
 Proof. 
@@ -1782,6 +1782,11 @@ Proof.
   - constructor; intros. specialize H with m n. apply (Acc_inv H).
     unfold hole_depth_lt in *; auto.
 Qed.
+
+Lemma hole_depth_lt_wf : well_founded hole_depth_lt.
+Proof. unfold well_founded; apply hole_depth_lt_wf_helper. Qed.
+
+
 
 
 
@@ -1816,54 +1821,34 @@ Definition top_scope Et := match pop_EC_scope Et with (Et', _) => Et' end.
 Definition next_scope_to_hole Et := match pop_EC_scope Et with (_, EP) => EP end.
 
 (* pop_EC_scope reduces hole_depth *)
-Lemma pop_EC_scope_reduces_hole_depth : forall Et Et' r, 
-    next_scope_to_hole Et = Edeflam r Et' -> hole_depth_lt Et' Et.
+Lemma pop_EC_scope_reduces_hole_depth :
+  forall Et Et' Et0 r,
+    pop_EC_scope Et = (Et0, Edeflam r Et') ->
+    hole_depth_lt Et' Et.
 Proof.
-  intros; unfold hole_depth_lt. destruct Et.
+  intro Et; unfold hole_depth_lt. destruct Et.
   induction EP; intros; simpl in *.
   - discriminate.
   - injection H; intros. rewrite H0. apply Nat.lt_succ_diag_r.
-  - apply IHEP. rewrite <- H. unfold next_scope_to_hole; simpl.
-    destruct (pop_EC_scope_proc EP). reflexivity.
+  - destruct (pop_EC_scope_proc EP). eapply IHEP. 
+    injection H; intros. rewrite H0; reflexivity.
 Qed.
-
 
 
 (* HELPER FUNCTION! ACC is the proof of accessibility for Et_cur 
     (i.e. that the hole_depth of Et_cur decreases at each call) *)
-Program Fixpoint split_hole_scope_builder (r : rvar) (Et_acc Et_cur : EC_term) 
+Fixpoint split_hole_scope_builder (r : rvar) (Et_acc Et_cur : EC_term) 
         (ACC : Acc hole_depth_lt Et_cur) {struct ACC} : EC_term * EC_proc :=
-  match pop_EC_scope Et_cur with
-  | (_, Ehol) => (Et_acc, Edeflam r Et_cur)
-  | (Et_next, Edeflam r' Et_rest) => 
-              split_hole_scope_builder r'
-                (Et_acc <=<[ Edeflam r Et_next ]) Et_rest 
-                (Acc_inv ACC _)
-  | _ => (Ebag 0 0 Ehol, Ehol) (* Cannot reach here *)
-  end.
-Obligations of split_hole_scope_builder.
-Next Obligation. apply pop_EC_scope_reduces_hole_depth with (r := r'). 
-    unfold next_scope_to_hole. rewrite <- Heq_anonymous. reflexivity. Qed.
-Next Obligation. split; intros; injection; discriminate. Qed.
-
-Print split_hole_scope_builder.
-
-
-(* Lemma split_hole_scope_builder_unfold :
-  forall r Et_acc Et_cur ACC,
-    split_hole_scope_builder r Et_acc Et_cur ACC = 
-  match pop_EC_scope Et_cur with
-  | (_, Ehol) => (Et_acc, Edeflam r Et_cur)
-  | (Et_next, Edeflam r' Et_rest) => 
-              split_hole_scope_builder r'
-                (Et_acc <=<[ Edeflam r Et_next ]) Et_rest 
-                (Acc_inv ACC (split_hole_scope_builder_obligation_1 
-                                  Et_cur Et_next r' Et_rest eq_refl))
-  | _ => (Ebag 0 0 Ehol, Ehol) (* Cannot reach here *)
-  end.
-Proof.
-  induction Et_cur.
-Qed. *)
+  (match pop_EC_scope Et_cur as y 
+      return (pop_EC_scope Et_cur = y) -> EC_term * EC_proc with
+  | (_, Ehol) => fun _ => (Et_acc, Edeflam r Et_cur)
+  | (Et_next, Edeflam r' Et_rest) => fun HEQ =>
+          let ACC_Et_rest := Acc_inv ACC 
+              (pop_EC_scope_reduces_hole_depth Et_cur Et_rest Et_next r' HEQ) in
+          split_hole_scope_builder r'
+              (Et_acc <=<[ Edeflam r Et_next ]) Et_rest ACC_Et_rest
+  | _ => fun _ => (Ebag 0 0 Ehol, Ehol) (* Cannot reach here *)
+  end) eq_refl.
 
 
 (* Applies pop_EC_scope until the "hole scope" is reached,
@@ -1872,14 +1857,12 @@ Qed. *)
       first element is the EC with the hole scope replaced by a hole
       and second element is the hole scope.
    The invariants of pop_EC_scope are also held by split_hole_scope. *)
-Program Definition split_hole_scope (Et : EC_term) : EC_term * EC_proc :=
+Definition split_hole_scope (Et : EC_term) : EC_term * EC_proc :=
   match pop_EC_scope Et with
   | (_, Ehol) => (Et, Ehol)
-  | (Et_acc, Edeflam r Et_cur) => split_hole_scope_builder r Et_acc Et_cur _
+  | (Et_acc, Edeflam r Et_cur) => split_hole_scope_builder r Et_acc Et_cur (hole_depth_lt_wf Et_cur)
   | _ => (Ebag 0 0 Ehol, Ehol) (* Cannot reach here *)
   end.
-Next Obligation. apply hole_depth_lt_wf. Qed.
-Next Obligation. split; intros; injection; discriminate. Qed.
 
 Definition bubble_hole_scope_up Et := 
   match split_hole_scope Et with 
@@ -1964,53 +1947,45 @@ Proof.
 Qed.
 
 Lemma split_hole_scope_builder_no_Ehol :
-  forall Et_cur ACC r Et_acc Et_outer,
-  (split_hole_scope_builder r Et_acc Et_cur ACC) <> (Et_outer, Ehol).
+  forall Et_cur ACC r Et_acc,
+  exists Et_outer r' Et_hs,
+  (split_hole_scope_builder r Et_acc Et_cur ACC) = (Et_outer, Edeflam r' Et_hs).
 Proof.
-  intro. 
-  unfold not, split_hole_scope_builder; intros.
+  induction Et_cur using (well_founded_induction hole_depth_lt_wf). 
+  destruct Et_cur; destruct EP; intros; destruct ACC.
+  - simpl. eexists; eauto.
+  - apply (H Et). unfold hole_depth_lt; auto.
+  - destruct (pop_EC_scope (Ebag m n (Epar EP P))) eqn:popEQ. destruct e0.
+    simpl in *. destruct EP.
+
+  destruct (pop_EC_scope Et_cur) eqn:PEQ. 
+  apply (H e0).
+  
+  
+  destruct ACC. destruct Et_cur. simpl in *.
   assert (
-      (fix split_hole_scope_builder
-      (r : rvar) (Et_acc Et_cur : EC_term) (ACC : Acc hole_depth_lt Et_cur) {struct ACC} :
-      EC_term * EC_proc :=
-      (let
-      (Et_next, e) as anonymous'
-      return (anonymous' = pop_EC_scope Et_cur -> EC_term * EC_proc) :=
-      pop_EC_scope Et_cur in
-      match e as e0 return ((Et_next, e0) = pop_EC_scope Et_cur -> EC_term * EC_proc)
-      with
-      | Ehol => fun _ : (Et_next, Ehol) = pop_EC_scope Et_cur => (Et_acc, Edeflam r
-      Et_cur)
+      (fix split_hole_scope_builder (r : rvar) (Et_acc Et_cur : EC_term) (ACC : Acc hole_depth_lt Et_cur) {struct ACC} : EC_term * EC_proc :=
+      (let (Et_next, e) as y return (pop_EC_scope Et_cur = y -> EC_term * EC_proc) := pop_EC_scope Et_cur in
+      match e as e0 return (pop_EC_scope Et_cur = (Et_next, e0) -> EC_term * EC_proc) with
+      | Ehol => fun _ : pop_EC_scope Et_cur = (Et_next, Ehol) => (Et_acc, Edeflam r Et_cur)
       | Edeflam r' Et_rest =>
-      fun Heq_anonymous : (Et_next, Edeflam r' Et_rest) = pop_EC_scope Et_cur =>
-      split_hole_scope_builder r' (Et_acc <=<[ Edeflam r Et_next]) Et_rest
-      (Acc_inv ACC
-      (split_hole_scope_builder_obligation_1 Et_cur Et_next r' Et_rest
-      Heq_anonymous))
-      | Epar EP P => fun _ : (Et_next, Epar EP P) = pop_EC_scope Et_cur =>
-      (Ebag 0 0 Ehol, Ehol)
+      fun HEQ : pop_EC_scope Et_cur = (Et_next, Edeflam r' Et_rest) =>
+      split_hole_scope_builder r' (Et_acc <=<[ Edeflam r Et_next]) Et_rest (Acc_inv ACC (pop_EC_scope_reduces_hole_depth Et_cur Et_rest Et_next r' HEQ))
+      | Epar EP P => fun _ : pop_EC_scope Et_cur = (Et_next, Epar EP P) => (Ebag 0 0 Ehol, Ehol)
       end) eq_refl) r Et_acc Et_cur ACC
     =
-      (let
-      (Et_next, e) as anonymous'
-      return (anonymous' = pop_EC_scope Et_cur -> EC_term * EC_proc) :=
-      pop_EC_scope Et_cur in
-      match e as e0 return ((Et_next, e0) = pop_EC_scope Et_cur -> EC_term * EC_proc)
-      with
-      | Ehol => fun _ : (Et_next, Ehol) = pop_EC_scope Et_cur => (Et_acc, Edeflam r
-      Et_cur)
+      (let (Et_next, e) as y return (pop_EC_scope Et_cur = y -> EC_term * EC_proc) := pop_EC_scope Et_cur in
+      match e as e0 return (pop_EC_scope Et_cur = (Et_next, e0) -> EC_term * EC_proc) with
+      | Ehol => fun _ : pop_EC_scope Et_cur = (Et_next, Ehol) => (Et_acc, Edeflam r Et_cur)
       | Edeflam r' Et_rest =>
-      fun Heq_anonymous : (Et_next, Edeflam r' Et_rest) = pop_EC_scope Et_cur =>
-      split_hole_scope_builder r' (Et_acc <=<[ Edeflam r Et_next]) Et_rest
-      (Acc_inv ACC
-      (split_hole_scope_builder_obligation_1 Et_cur Et_next r' Et_rest
-      Heq_anonymous))
-      | Epar EP P => fun _ : (Et_next, Epar EP P) = pop_EC_scope Et_cur =>
-      (Ebag 0 0 Ehol, Ehol)
+      fun HEQ : pop_EC_scope Et_cur = (Et_next, Edeflam r' Et_rest) =>
+      split_hole_scope_builder r' (Et_acc <=<[ Edeflam r Et_next]) Et_rest (Acc_inv ACC (pop_EC_scope_reduces_hole_depth Et_cur Et_rest Et_next r' HEQ))
+      | Epar EP P => fun _ : pop_EC_scope Et_cur = (Et_next, Epar EP P) => (Ebag 0 0 Ehol, Ehol)
       end) eq_refl
   ).
   {
-    admit.
+    destruct Et_cur; induction EP.
+    - simpl. destruct ACC. simpl.
   }
   rewrite H0 in H; clear H0.
   destruct (pop_EC_scope Et_cur).
