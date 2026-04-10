@@ -1832,7 +1832,7 @@ Proof.
   - injection H; intros. rewrite H0. apply Nat.lt_succ_diag_r.
   - destruct (pop_EC_scope_proc EP). eapply IHEP. 
     injection H; intros. rewrite H0; reflexivity.
-Qed.
+Defined.
 
 
 (* HELPER FUNCTION! ACC is the proof of accessibility for Et_cur 
@@ -1946,19 +1946,48 @@ Proof.
     rewrite (H e); auto.
 Qed.
 
+Lemma foo : forall EP r m n Et_acc ACC Et_outer1 r1 Et_hs1,
+  split_hole_scope_builder r Et_acc (Ebag m n EP) ACC =
+    (Et_outer1, Edeflam r1 Et_hs1) ->
+  forall P ACC',
+  exists Et_outer2 r2 Et_hs2,
+  split_hole_scope_builder r Et_acc (Ebag m n (Epar EP P)) ACC' =
+    (Et_outer2, Edeflam r2 Et_hs2).
+Proof.
+  induction EP; intros; destruct ACC; destruct ACC'; repeat eexists.
+  - simpl. admit.
+  - admit.
+Admitted.
+
 Lemma split_hole_scope_builder_no_Ehol :
   forall Et_cur ACC r Et_acc,
   exists Et_outer r' Et_hs,
   (split_hole_scope_builder r Et_acc Et_cur ACC) = (Et_outer, Edeflam r' Et_hs).
 Proof.
-  induction Et_cur using (well_founded_induction hole_depth_lt_wf). 
-  destruct Et_cur; destruct EP; intros; destruct ACC.
+  induction Et_cur using (well_founded_induction hole_depth_lt_wf).
+  destruct Et_cur; induction EP; intros; destruct ACC.
   - simpl. eexists; eauto.
   - apply (H Et). unfold hole_depth_lt; auto.
-  - destruct (pop_EC_scope (Ebag m n (Epar EP P))) eqn:popEQ. destruct e0.
-    simpl in *. destruct EP.
+  - unfold hole_depth_lt in H, IHEP; simpl in H, IHEP.
+    remember (IHEP H) as IH; clear HeqIH H IHEP.
+    specialize IH with (Acc_intro (Ebag m n EP) a) r Et_acc.
+    destruct IH as (Et_outer & r' & Et_hs & H).
+    eexists; exists r', Et_hs.
+    unfold split_hole_scope_builder in *.
+    destruct (pop_EC_scope (Ebag m n (Epar EP P))). injection SEQ.
 
-  destruct (pop_EC_scope Et_cur) eqn:PEQ. 
+
+
+
+    destruct (pop_EC_scope (Ebag m n EP)) as (Et' & EP') eqn:popEQ; destruct Et'.
+    assert (pop_EC_scope (Ebag m n (Epar EP P)) = ((Ebag m0 n0 (Epar EP0 P)), EP')).
+    { simpl in *. destruct (pop_EC_scope_proc EP). 
+      injection popEQ; intros; subst; auto. }
+    unfold split_hole_scope_builder in *.
+    unfold pop_EC_scope_reduces_hole_depth. simpl.
+    destruct (pop_EC_scope (Ebag m n (Epar EP P))).
+    
+  destruct (pop_EC_scope Et_cur) EQ. eqn:P
   apply (H e0).
   
   
