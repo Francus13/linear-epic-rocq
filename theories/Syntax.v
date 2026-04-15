@@ -1786,6 +1786,13 @@ Qed.
 Lemma hole_depth_lt_wf : well_founded hole_depth_lt.
 Proof. unfold well_founded; apply hole_depth_lt_wf_helper. Qed.
 
+Lemma Et_acc_hole_depth_lt : forall (Et : EC_term), Acc hole_depth_lt Et.
+Proof. apply hole_depth_lt_wf_helper. Qed.
+
+Lemma EP_acc_hole_depth_lt : forall (EP : EC_proc) m n, Acc hole_depth_lt (Ebag m n EP).
+Proof. apply hole_depth_lt_wf_helper. Qed.
+
+
 
 
 
@@ -1925,7 +1932,30 @@ with rename_fvar_EC_term {m m'} (v : ren m m') (Et : EC_term) :=
 
 (* Lemmas for EC functions *)
 
-Lemma pop_EC_scope_Ehol :
+Lemma inv_pop_EC_scope :
+      (forall (Et : EC_term),
+          (exists Et_top,
+            pop_EC_scope Et = (Et_top, Ehol))
+      \/  (exists Et_top r Et_rest,
+            pop_EC_scope Et = (Et_top, Edeflam r Et_rest)))
+  /\  (forall (EP : EC_proc),
+          (exists EP_top,
+            pop_EC_scope_proc EP = (EP_top, Ehol))
+      \/  (exists EP_top r Et_rest,
+            pop_EC_scope_proc EP = (EP_top, Edeflam r Et_rest))).
+Proof.
+  apply EC_ind; intros.
+  - destruct H as [[EP_top H] | [EP_top [r [Et_rest H]]]].
+    + left; eexists; simpl. rewrite H; auto.
+    + right; repeat eexists; simpl. rewrite H; auto.
+  - left; eexists; simpl; eauto.
+  - right; repeat eexists.
+  - destruct H as [[EP_top H] | [EP_top [r [Et_rest H]]]].
+    + left; eexists; simpl. rewrite H; auto.
+    + right; repeat eexists; simpl. rewrite H; auto.
+Qed.
+
+Lemma inv_pop_EC_scope_Ehol_eq :
       (forall (Et Et_top : EC_term),
         pop_EC_scope Et = (Et_top, Ehol) ->
         Et = Et_top)
@@ -1934,102 +1964,197 @@ Lemma pop_EC_scope_Ehol :
         EP = EP_top).
 Proof.
   apply EC_ind; intros.
-  - unfold pop_EC_scope in H0. destruct (pop_EC_scope_proc EP) eqn:Eq.
+  - unfold pop_EC_scope in H0. destruct (pop_EC_scope_proc EP) eqn:popEQ.
     injection H0; intros; subst. 
     rewrite (H e); auto.
   - unfold pop_EC_scope_proc in H. injection H; auto.
   - unfold pop_EC_scope_proc in H0. 
     injection H0; intros; subst; auto.
   - unfold pop_EC_scope_proc in H0. fold pop_EC_scope_proc in H0.   (* FRAN *)
-    destruct (pop_EC_scope_proc EP) eqn:Eq.
+    destruct (pop_EC_scope_proc EP) eqn:popEQ.
     injection H0; intros; subst. 
     rewrite (H e); auto.
 Qed.
 
-Lemma foo : forall EP r m n Et_acc ACC Et_outer1 r1 Et_hs1,
-  split_hole_scope_builder r Et_acc (Ebag m n EP) ACC =
-    (Et_outer1, Edeflam r1 Et_hs1) ->
-  forall P ACC',
-  exists Et_outer2 r2 Et_hs2,
-  split_hole_scope_builder r Et_acc (Ebag m n (Epar EP P)) ACC' =
-    (Et_outer2, Edeflam r2 Et_hs2).
+Lemma inv_pop_EC_scope_Ehol_hs :
+      (forall (Et Et_top : EC_term),
+        pop_EC_scope Et = (Et_top, Ehol) ->
+        is_hole_scope_at_top Et = true)
+  /\  (forall (EP EP_top : EC_proc),
+        pop_EC_scope_proc EP = (EP_top, Ehol) ->
+        is_hole_scope_at_top_proc EP = true).
 Proof.
-  induction EP; intros; destruct ACC; destruct ACC'; repeat eexists.
-  - simpl. admit.
-  - admit.
-Admitted.
+  unfold is_hole_scope_at_top, is_hole_scope_at_top_proc, compose. apply EC_ind; intros.
+  all : try solve [
+    simpl in *; auto;
+    try discriminate H0;  (* For Elamdef case, which cannot return Ehol as 2nd elem *)
+    destruct (hole_depth_proc EP); auto; destruct (pop_EC_scope_proc EP) eqn:popEQ;
+    injection H0; intros; subst; ediscriminate H; auto
+  ].
+Qed.
 
-Lemma split_hole_scope_builder_no_Ehol :
-  forall Et_cur ACC r Et_acc,
-  exists Et_outer r' Et_hs,
-  (split_hole_scope_builder r Et_acc Et_cur ACC) = (Et_outer, Edeflam r' Et_hs).
+Lemma inv_pop_EC_scope_Edeflam :
+      (forall (Et Et_top : EC_term) r Et_rest,
+        pop_EC_scope Et = (Et_top, Edeflam r Et_rest) ->
+        is_hole_scope_at_top Et = false)
+  /\  (forall (EP EP_top : EC_proc) r Et_rest,
+        pop_EC_scope_proc EP = (EP_top, Edeflam r Et_rest) ->
+        is_hole_scope_at_top_proc EP = false).
+Proof.
+  unfold is_hole_scope_at_top, is_hole_scope_at_top_proc, compose. apply EC_ind; intros.
+  all : try solve [
+    simpl in *; auto;
+    try discriminate H;  (* For Ehol case, which cannot return Edeflam as 2nd elem *)
+    destruct (hole_depth_proc EP); auto; destruct (pop_EC_scope_proc EP) eqn:popEQ;
+    injection H0; intros; subst; ediscriminate H; auto
+  ].
+Qed.
+
+Lemma inv_pop_EC_scope_Epar :
+  (forall Et Et_top EP P,
+    pop_EC_scope Et <> (Et_top, Epar EP P)).
+Proof.
+  unfold not; intros.
+  destruct inv_pop_EC_scope as [H0 _]. destruct (H0 Et); clear H0.
+  - destruct H1. rewrite H0 in H; discriminate.
+  - destruct H1 as (a & b & c & H0). rewrite H0 in H; discriminate.
+Qed.
+
+
+
+Lemma inv_split_hole_scope_builder :
+  forall Et_cur r Et_acc ACC,
+    exists Et_outer r' Et_hs,
+    split_hole_scope_builder r Et_acc Et_cur ACC = 
+    (Et_outer, Edeflam r' Et_hs).
 Proof.
   induction Et_cur using (well_founded_induction hole_depth_lt_wf).
   destruct Et_cur; induction EP; intros; destruct ACC.
   - simpl. eexists; eauto.
   - apply (H Et). unfold hole_depth_lt; auto.
-  - unfold hole_depth_lt in H, IHEP; simpl in H, IHEP.
-    remember (IHEP H) as IH; clear HeqIH H IHEP.
-    specialize IH with (Acc_intro (Ebag m n EP) a) r Et_acc.
-    destruct IH as (Et_outer & r' & Et_hs & H).
-    eexists; exists r', Et_hs.
-    unfold split_hole_scope_builder in *.
-    destruct (pop_EC_scope (Ebag m n (Epar EP P))). injection SEQ.
+  - unfold hole_depth_lt in H, IHEP. cbn in H, IHEP.
+    remember (IHEP H) as IH; clear HeqIH IHEP.
+    repeat eexists.
+    unfold split_hole_scope_builder. fold split_hole_scope_builder.
+    remember (Ebag m n (Epar EP P)) as x.
+    admit.
+Admitted.
 
 
 
-
-    destruct (pop_EC_scope (Ebag m n EP)) as (Et' & EP') eqn:popEQ; destruct Et'.
-    assert (pop_EC_scope (Ebag m n (Epar EP P)) = ((Ebag m0 n0 (Epar EP0 P)), EP')).
-    { simpl in *. destruct (pop_EC_scope_proc EP). 
-      injection popEQ; intros; subst; auto. }
-    unfold split_hole_scope_builder in *.
-    unfold pop_EC_scope_reduces_hole_depth. simpl.
-    destruct (pop_EC_scope (Ebag m n (Epar EP P))).
-    
-  destruct (pop_EC_scope Et_cur) EQ. eqn:P
-  apply (H e0).
-  
-  
-  destruct ACC. destruct Et_cur. simpl in *.
-  assert (
-      (fix split_hole_scope_builder (r : rvar) (Et_acc Et_cur : EC_term) (ACC : Acc hole_depth_lt Et_cur) {struct ACC} : EC_term * EC_proc :=
-      (let (Et_next, e) as y return (pop_EC_scope Et_cur = y -> EC_term * EC_proc) := pop_EC_scope Et_cur in
-      match e as e0 return (pop_EC_scope Et_cur = (Et_next, e0) -> EC_term * EC_proc) with
-      | Ehol => fun _ : pop_EC_scope Et_cur = (Et_next, Ehol) => (Et_acc, Edeflam r Et_cur)
-      | Edeflam r' Et_rest =>
-      fun HEQ : pop_EC_scope Et_cur = (Et_next, Edeflam r' Et_rest) =>
-      split_hole_scope_builder r' (Et_acc <=<[ Edeflam r Et_next]) Et_rest (Acc_inv ACC (pop_EC_scope_reduces_hole_depth Et_cur Et_rest Et_next r' HEQ))
-      | Epar EP P => fun _ : pop_EC_scope Et_cur = (Et_next, Epar EP P) => (Ebag 0 0 Ehol, Ehol)
-      end) eq_refl) r Et_acc Et_cur ACC
-    =
-      (let (Et_next, e) as y return (pop_EC_scope Et_cur = y -> EC_term * EC_proc) := pop_EC_scope Et_cur in
-      match e as e0 return (pop_EC_scope Et_cur = (Et_next, e0) -> EC_term * EC_proc) with
-      | Ehol => fun _ : pop_EC_scope Et_cur = (Et_next, Ehol) => (Et_acc, Edeflam r Et_cur)
-      | Edeflam r' Et_rest =>
-      fun HEQ : pop_EC_scope Et_cur = (Et_next, Edeflam r' Et_rest) =>
-      split_hole_scope_builder r' (Et_acc <=<[ Edeflam r Et_next]) Et_rest (Acc_inv ACC (pop_EC_scope_reduces_hole_depth Et_cur Et_rest Et_next r' HEQ))
-      | Epar EP P => fun _ : pop_EC_scope Et_cur = (Et_next, Epar EP P) => (Ebag 0 0 Ehol, Ehol)
-      end) eq_refl
-  ).
-  {
-    destruct Et_cur; induction EP.
-    - simpl. destruct ACC. simpl.
-  }
-  rewrite H0 in H; clear H0.
+(* Lemma split_hole_scope_builder_no_Ehol :
+    (forall Et_cur ACC r Et_acc,
+      exists Et_outer r' Et_hs,
+      split_hole_scope_builder r Et_acc Et_cur ACC = 
+      (Et_outer, Edeflam r' Et_hs))
+/\  (forall EP r r' m n Et_acc ACC Et_outer Et_hs,
+      split_hole_scope_builder r Et_acc (Ebag m n EP) ACC =
+        (Et_outer, Edeflam r' Et_hs) ->
+      forall P,
+      exists ACC' Et_outer' r'' Et_hs',
+      split_hole_scope_builder r Et_acc (Ebag m n (Epar EP P)) ACC' =
+        (Et_outer', Edeflam r'' Et_hs')).
+Proof.
+  apply EC_ind.
+  - admit.
+  - intros.
+    assert (forall y, hole_depth_lt y (Ebag m n (Epar Ehol P)) 
+                -> Acc hole_depth_lt y) as b by (apply hole_depth_lt_wf).
+    exists (Acc_intro (Ebag m n (Epar Ehol P)) b).
+    destruct ACC. repeat eexists; eauto.
+  - intros.
+    assert (forall y, hole_depth_lt y (Ebag m n (Epar (Edeflam r Et) P)) 
+                -> Acc hole_depth_lt y) as b by (apply hole_depth_lt_wf).
+    exists (Acc_intro (Ebag m n (Epar (Edeflam r Et) P)) b).
+    destruct ACC. simpl. apply H.
+  - intros.
+    assert (forall y, hole_depth_lt y (Ebag m n (Epar (Epar EP P) P0)) 
+                -> Acc hole_depth_lt y) as b by (apply hole_depth_lt_wf).
+    exists (Acc_intro (Ebag m n (Epar (Epar EP P) P0)) b).
+    unfold split_hole_scope_builder; fold split_hole_scope_builder.
+    remember (Acc_inv (Acc_intro (Ebag m n (Epar (Epar EP P) P0)) b)) as ACC'.
+    unfold pop_EC_scope, pop_EC_scope_proc. simpl.
+    destruct (pop_EC_scope (Ebag m n (Epar (Epar EP P) P0))).
   destruct (pop_EC_scope Et_cur).
+Qed. *)
+
+
+
+Lemma inv_split_hole_scope_builder_Ehol_Epar :
+    (forall Et_cur r Et_acc ACC Et_outer,
+      split_hole_scope_builder r Et_acc Et_cur ACC <> (Et_outer, Ehol))
+/\  (forall Et_cur r Et_acc ACC Et_outer EP P,
+      split_hole_scope_builder r Et_acc Et_cur ACC <> (Et_outer, Epar EP P)).
+Proof.
+  split; intros.
+  all: destruct (inv_split_hole_scope_builder Et_cur r Et_acc ACC) as (Et_outer' & r' & Et_hs & H).
+  all: rewrite H; discriminate.
 Qed.
 
-Lemma split_hole_scope_Ehol :
+Lemma inv_split_hole_scope :
+      (forall (Et : EC_term),
+          (exists Et_top,
+            split_hole_scope Et = (Et_top, Ehol))
+      \/  (exists Et_top r Et_rest,
+            split_hole_scope Et = (Et_top, Edeflam r Et_rest))).
+Proof.
+  intros; unfold split_hole_scope.
+  destruct (pop_EC_scope Et); destruct e0.
+  - left; eauto.
+  - right. apply inv_split_hole_scope_builder.
+  - left; eauto.
+Qed.
+
+Lemma inv_split_hole_scope_Ehol_eq :
   forall (Et Et_top : EC_term),
     split_hole_scope Et = (Et_top, Ehol) ->
     Et = Et_top.
 Proof.
-  unfold split_hole_scope; intros. destruct (pop_EC_scope Et) eqn:Eq.
-  destruct e0.
+  unfold split_hole_scope.
+  intro Et; destruct (pop_EC_scope Et) eqn:popEQ. generalize dependent e.
+  induction e0; intros.
   - injection H; intros; subst; auto.
-  - unfold split_hole_scope_builder in H. fold split_hole_scope_builder in H.
-    
+  - apply inv_split_hole_scope_builder_Ehol_Epar in H; destruct H.
+  - eapply IHe0. admit.
+Admitted.
+
+Lemma inv_split_hole_scope_Ehol_hs :
+  forall (Et Et_top : EC_term),
+    split_hole_scope Et = (Et_top, Ehol) ->
+    is_hole_scope_at_top Et = true.
+Proof.
+  (* intro Et. destruct (pop_EC_scope Et) eqn:popEQ. generalize dependent e.
+  induction e0; intros.
+  - eapply inv_pop_EC_scope_Ehol_hs; eauto.
+  - unfold split_hole_scope in H; rewrite popEQ in H. 
+    erewrite inv_split_hole_scope_builder in H. remember (inv_split_hole_scope_builder Et0 r e (hole_depth_lt_wf Et0)).
+    clear Heqe0; destruct e0 as (Et_outer & r' & Et_hs & H0).
+    rewrite H0 in H; discriminate.
+  - apply inv_pop_EC_scope_par in popEQ; destruct popEQ. *)
+Admitted.
+
+Lemma inv_split_hole_scope_Edeflam :
+  forall (Et Et_top : EC_term) r Et_rest,
+    split_hole_scope Et = (Et_top, Edeflam r Et_rest) ->
+    is_hole_scope_at_top Et = false.
+Proof.
+  (* unfold is_hole_scope_at_top, is_hole_scope_at_top_proc, compose. apply EC_ind; intros.
+  all : try solve [
+    simpl in *; auto;
+    try discriminate H;  (* For Ehol case, which cannot return Edeflam as 2nd elem *)
+    destruct (hole_depth_proc EP); auto; destruct (pop_EC_scope_proc EP) eqn:popEQ;
+    injection H0; intros; subst; ediscriminate H; auto
+  ]. *)
+Admitted.
+
+Lemma inv_split_hole_scope_Epar :
+  (forall Et Et_top EP P,
+    split_hole_scope Et <> (Et_top, Epar EP P)).
+Proof.
+  unfold not; intros.
+  destruct (inv_split_hole_scope Et).
+  - destruct H0. rewrite H0 in H; discriminate.
+  - destruct H0 as (a & b & c & H0). rewrite H0 in H; discriminate.
 Qed.
 
 
@@ -2591,9 +2716,10 @@ Lemma tuple_cut_ren_EC_wf :
 Proof.
   intros. inversion H; existT_eq; subst.
   unfold tuple_cut_hole_scope, mutate_hole_scope; simpl. 
-  destruct (split_hole_scope (Ebag m0 n0 EP)) as (Et_outer & EP_hs) eqn:Eq.
+  destruct (split_hole_scope (Ebag m0 n0 EP)) as (Et_outer & EP_hs) eqn:shsEQ.
   induction EP_hs.
   - unfold scoped_rvars_at_hole, case_hole_scope_at_top.
+      apply split_hole_scope_Ehol in shsEQ.
       TODO.
 Qed.
 
