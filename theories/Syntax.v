@@ -1700,6 +1700,7 @@ Scheme EC_term_rec_m := Induction for EC_term Sort Set
   with EC_proc_rec_m := Induction for EC_proc Sort Set.
 Combined Scheme EC_rec from EC_term_rec_m, EC_proc_rec_m.
 
+
 Reserved Notation "Et <=[ P ]" (at level 55).
 Reserved Notation "EP <=[ P ]p" (at level 55).
 Reserved Notation "Et <=<[ EP ]" (at level 55).
@@ -1743,6 +1744,31 @@ Definition get_rvars_Et Et := match Et with Ebag _ n _ => n end.
 Definition get_proc_Et Et := match Et with Ebag _ _ EP => EP end.
 
 
+
+Inductive less_Epars : EC_term -> EC_term -> Prop :=
+| top_Epar : 
+  forall (m n : nat) (EP : EC_proc) (P : proc),
+    less_Epars (Ebag m n EP) (Ebag m n (Epar EP P))
+.
+
+Lemma less_Epars_wf_helper : 
+  (forall (Et : EC_term), Acc less_Epars Et) /\
+  (forall (EP : EC_proc) m n, Acc less_Epars (Ebag m n EP)).
+Proof. 
+  apply EC_ind; intros.
+  (* Ebag is immediate by IH *)
+  - apply H.
+  (* Ehol and Edeflam are base cases: there is no Epar to remove *)
+  - constructor; intros. inversion H.
+  - constructor; intros. inversion H0.
+  (* Epar follows from IH *)
+  - constructor; intros. inversion H0; subst. apply H.
+Qed.
+
+Lemma less_Epars_wf : well_founded less_Epars.
+Proof. unfold well_founded; apply less_Epars_wf_helper. Qed.
+
+
 (* Gives the number of lambda bindings encountered when traversing 
       to the hole (i.e. how many scopes deep the hole is) *)
 Fixpoint hole_depth Et := hole_depth_proc (get_proc_Et Et)
@@ -1783,14 +1809,49 @@ Proof.
     unfold hole_depth_lt in *; auto.
 Qed.
 
+Definition hole_depth_lt_OR_less_Epars :=
+  fun Et1 Et2 => hole_depth_lt Et1 Et2 \/ less_Epars Et1 Et2.
+
+(* Every EC is accessible with hole_depth_lt.
+   Used to prove well-foundedness of split_hole_scope. *)
+Lemma hole_depth_lt_OR_less_Epars_wf_helper : 
+  (forall (Et : EC_term), Acc hole_depth_lt_OR_less_Epars Et) /\
+  (forall (EP : EC_proc) m n, Acc hole_depth_lt_OR_less_Epars (Ebag m n EP)).
+Proof. 
+  unfold hole_depth_lt_OR_less_Epars, hole_depth_lt. apply EC_ind; intros.
+  (* Ebag is immediate by IH *)
+  - apply H.
+  (* Ehol has depth 0 and has no Epars *)
+  - constructor; intros.
+    simpl in H. destruct H.
+    + lia.
+    + inversion H.
+  (* Elam adds to depth but has no Epars *)
+  - constructor; intros. destruct H0.
+
+
+    + (* Case on whether we need a new Acc layer before IH *)
+      simpl in H0.
+      destruct (Nat.eqb_spec (hole_depth y) (hole_depth Et)).
+      * constructor; intros. apply (Acc_inv H).
+        rewrite <- e; clear e. destruct H1; auto.
+         admit.
+      * apply (Acc_inv H). simpl in H0. lia.
+    + inversion H0.
+  (* Epar follows from IH *)
+  - constructor; intros. destruct H0.
+    + apply (Acc_inv (H m n)). auto.
+    + inversion H0; subst. apply H.
+Admitted.
+
+
+
 Lemma hole_depth_lt_wf : well_founded hole_depth_lt.
 Proof. unfold well_founded; apply hole_depth_lt_wf_helper. Qed.
 
-Lemma Et_acc_hole_depth_lt : forall (Et : EC_term), Acc hole_depth_lt Et.
-Proof. apply hole_depth_lt_wf_helper. Qed.
-
-Lemma EP_acc_hole_depth_lt : forall (EP : EC_proc) m n, Acc hole_depth_lt (Ebag m n EP).
-Proof. apply hole_depth_lt_wf_helper. Qed.
+Lemma hole_depth_lt_OR_less_Epars_wf : 
+  well_founded (fun Et1 Et2 => hole_depth_lt Et1 Et2 \/ less_Epars Et1 Et2).
+Proof. unfold well_founded; intros. Search well_founded. Print Nat.lt_wf. Admitted.
 
 
 
@@ -2029,12 +2090,35 @@ Lemma inv_split_hole_scope_builder :
     (Et_outer, Edeflam r' Et_hs).
 Proof.
   induction Et_cur using (well_founded_induction hole_depth_lt_wf).
+  destruct Et_cur; destruct EP; intros; destruct ACC.
+  - simpl. eexists; eauto.
+  - apply (H Et). unfold hole_depth_lt; auto.
+  - 
+    unfold split_hole_scope_builder. fold split_hole_scope_builder.
+    remember (Ebag m n (Epar EP P)) as x.
+    destruct (pop_EC_scope x).
+    refine (
+      match pop_EC_scope x with
+      | (e1, e2) => _
+      end
+    ).
+    admit.
+Admitted.
+
+
+
+Lemma inv_split_hole_scope_builder' :
+  forall Et_cur r Et_acc ACC,
+    exists Et_outer r' Et_hs,
+    split_hole_scope_builder r Et_acc Et_cur ACC = 
+    (Et_outer, Edeflam r' Et_hs).
+Proof.
+  induction Et_cur using (well_founded_induction hole_depth_lt_wf).
   destruct Et_cur; induction EP; intros; destruct ACC.
   - simpl. eexists; eauto.
   - apply (H Et). unfold hole_depth_lt; auto.
   - unfold hole_depth_lt in H, IHEP. cbn in H, IHEP.
     remember (IHEP H) as IH; clear HeqIH IHEP.
-    repeat eexists.
     unfold split_hole_scope_builder. fold split_hole_scope_builder.
     remember (Ebag m n (Epar EP P)) as x.
     admit.
@@ -2042,7 +2126,7 @@ Admitted.
 
 
 
-(* Lemma split_hole_scope_builder_no_Ehol :
+Lemma split_hole_scope_builder_no_Ehol :
     (forall Et_cur ACC r Et_acc,
       exists Et_outer r' Et_hs,
       split_hole_scope_builder r Et_acc Et_cur ACC = 
@@ -2061,22 +2145,23 @@ Proof.
     assert (forall y, hole_depth_lt y (Ebag m n (Epar Ehol P)) 
                 -> Acc hole_depth_lt y) as b by (apply hole_depth_lt_wf).
     exists (Acc_intro (Ebag m n (Epar Ehol P)) b).
-    destruct ACC. repeat eexists; eauto.
+    repeat eexists; eauto.
   - intros.
     assert (forall y, hole_depth_lt y (Ebag m n (Epar (Edeflam r Et) P)) 
                 -> Acc hole_depth_lt y) as b by (apply hole_depth_lt_wf).
     exists (Acc_intro (Ebag m n (Epar (Edeflam r Et) P)) b).
-    destruct ACC. simpl. apply H.
+    simpl. apply H.
   - intros.
     assert (forall y, hole_depth_lt y (Ebag m n (Epar (Epar EP P) P0)) 
                 -> Acc hole_depth_lt y) as b by (apply hole_depth_lt_wf).
     exists (Acc_intro (Ebag m n (Epar (Epar EP P) P0)) b).
+    simpl. destruct (pop_EC_scope_proc EP).
     unfold split_hole_scope_builder; fold split_hole_scope_builder.
     remember (Acc_inv (Acc_intro (Ebag m n (Epar (Epar EP P) P0)) b)) as ACC'.
     unfold pop_EC_scope, pop_EC_scope_proc. simpl.
     destruct (pop_EC_scope (Ebag m n (Epar (Epar EP P) P0))).
   destruct (pop_EC_scope Et_cur).
-Qed. *)
+Qed.
 
 
 
