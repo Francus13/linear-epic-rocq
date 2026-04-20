@@ -238,6 +238,14 @@ Definition mutate_hole_scope (f : EC_term -> EC_term) (Et : EC_term) :=
   | _ => Ebag 0 0 Ehol (* Cannot reach here *)
   end.
 
+(* Mutates the hole scope with a function f *)
+Definition mutate_under_hole_scope (f : EC_proc -> EC_proc) (Et : EC_term) :=
+  match split_hole_scope Et with
+  | (_, Ehol) => match Et with Ebag m n EP => Ebag m n (f EP) end
+  | (Et_os, Edeflam r (Ebag m n EP)) => Et_os <=<[ Edeflam r (Ebag m n (f EP)) ]
+  | _ => Ebag 0 0 Ehol (* Cannot reach here *)
+  end.
+
 
 
 (* Apply renamings on ECs *)
@@ -531,14 +539,12 @@ Combined Scheme wf_EC_ind from wf_EC_term_ind, wf_EC_proc_ind.
 
 (* Filling an EC preserves well-formedness *)
 Lemma fill_EC_wf_pres :
-      (forall (m n m_hol n_hol:nat) (G_hol : lctxt m_hol) (D_hol : lctxt n_hol)
-            (Et : EC_term), 
+      (forall m n m_hol n_hol G_hol D_hol Et,
         wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
         forall (P : proc),
           wf_proc m_hol n_hol G_hol D_hol P ->
         wf_term m n (Et <=[ P ]))
-  /\  (forall (m n m_hol n_hol:nat) (G : lctxt m) (D : lctxt n)
-            (G_hol : lctxt m_hol) (D_hol : lctxt n_hol) (EP : EC_proc), 
+  /\  (forall m n m_hol n_hol G D G_hol D_hol EP, 
         wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP ->
         forall (P : proc),
           wf_proc m_hol n_hol G_hol D_hol P ->
@@ -553,16 +559,13 @@ Proof.
     + apply wf_lam; auto. reflexivity.
 Qed.
 
-Lemma fill_EC_wf_pres_term : (forall (m n m_hol n_hol:nat) 
-  (G_hol : lctxt m_hol) (D_hol : lctxt n_hol) (Et : EC_term), 
+Lemma fill_EC_wf_pres_term : forall m n m_hol n_hol G_hol D_hol Et,
   wf_EC_term m n m_hol n_hol G_hol D_hol Et -> forall (P : proc),
-  wf_proc m_hol n_hol G_hol D_hol P -> wf_term m n (Et <=[ P ])).
+  wf_proc m_hol n_hol G_hol D_hol P -> wf_term m n (Et <=[ P ]).
 Proof. apply fill_EC_wf_pres. Qed.
-Lemma fill_EC_wf_pres_proc : (forall (m n m_hol n_hol:nat) 
-  (G : lctxt m) (D : lctxt n) (G_hol : lctxt m_hol) 
-  (D_hol : lctxt n_hol) (EP : EC_proc), 
+Lemma fill_EC_wf_pres_proc : forall m n m_hol n_hol G D G_hol D_hol EP, 
   wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP -> forall (P : proc),
-  wf_proc m_hol n_hol G_hol D_hol P -> wf_proc m n G D (EP <=[ P ]p)).
+  wf_proc m_hol n_hol G_hol D_hol P -> wf_proc m n G D (EP <=[ P ]p).
 Proof. apply fill_EC_wf_pres. Qed.
 
 
@@ -651,14 +654,12 @@ Qed.
 
 (* The rvar hole context has a maximum binding of 2 *)
 Lemma max_rvar_hole_EC_wf :
-      (forall (m n m_hol n_hol:nat) (G_hol : lctxt m_hol) (D_hol : lctxt n_hol)
-            (Et : EC_term), 
+      (forall m n m_hol n_hol G_hol D_hol Et,
         wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
         forall r,
           r < n_hol ->
         D_hol r <= 2)
-  /\  (forall (m n m_hol n_hol:nat) (G : lctxt m) (D : lctxt n)
-            (G_hol : lctxt m_hol) (D_hol : lctxt n_hol) (EP : EC_proc), 
+  /\  (forall m n m_hol n_hol G D G_hol D_hol EP, 
         wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP ->
         forall r,
           r < n_hol ->
@@ -680,5 +681,40 @@ Proof.
     rewrite HD in H1; auto. unfold sum in H1; lia.
   (* Elamdef *)
   - auto.
+Qed.
+
+
+
+(* Preservation Lemmas about EC Functions *)
+
+Lemma pop_EC_scope_pres :
+      (forall m n m_hol n_hol G_hol D_hol Et,
+        wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
+      forall Et_top r Et_rest,
+        pop_EC_scope Et = (Et_top, Edeflam r Et_rest) ->
+        let m_inner := get_fvars_Et Et + m in
+        let n_inner := get_rvars_Et Et + n in
+            wf_EC_term m n m n (zero m_inner) (one n_inner r) Et_top
+        /\  wf_EC_term m_inner 1 m_hol n_hol G_hol D_hol Et_rest)
+  /\  (forall m n m_hol n_hol G D G_hol D_hol EP, 
+        wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP ->
+      forall EP_top r Et_rest,
+        pop_EC_scope_proc EP = (EP_top, Edeflam r Et_rest) ->
+            wf_EC_proc m n m n G D (zero m) (one n r) EP_top
+        /\  wf_EC_term m 1 m_hol n_hol G_hol D_hol Et_rest). 
+Proof.
+  apply wf_EC_ind; simpl; intros.
+  - split.
+    + destruct (pop_EC_scope_proc EP) eqn:popEQ. injection H0; intros; subst.
+      econstructor; eauto. apply H.
+    +
+    rewrite (H e); auto.
+  - unfold pop_EC_scope_proc in H. injection H; auto.
+  - unfold pop_EC_scope_proc in H0. 
+    injection H0; intros; subst; auto.
+  - unfold pop_EC_scope_proc in H0. fold pop_EC_scope_proc in H0.   (* FRAN *)
+    destruct (pop_EC_scope_proc EP) eqn:popEQ.
+    injection H0; intros; subst. 
+    rewrite (H e); auto.
 Qed.
 

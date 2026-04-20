@@ -10,6 +10,7 @@ From Stdlib Require Import
   Lia.
 
 From LEpic Require Import Contexts Syntax EvalContexts.
+Import Renamings.
 
 Local Open Scope program_scope.
 Local Open Scope bool_scope.
@@ -267,7 +268,7 @@ Definition scoped_rvars_at_hole : EC_term -> nat :=
 
 Definition tuple_cut_hole_scope Et r1 r2 r1' r2' := 
   let ren := cut_renaming (scoped_rvars_at_hole Et) r1 r2 r1' r2' in
-  mutate_hole_scope (rename_rvar_EC_term ren) Et.
+  mutate_under_hole_scope (rename_rvar_EC_proc ren) Et.
 
 
 
@@ -466,6 +467,7 @@ repeat match goal with
 end.
 
 
+
 (* Removing a resource requirement from the hole (changing 2 uses to 0 uses) 
    preserves EC well-formedness *)
 Lemma rem_hole_rvar_EC_wf : 
@@ -541,6 +543,9 @@ Proof.
 Qed.
 
 
+
+Lemma cut_renaming_pres : True.
+
 Lemma tuple_cut_ren_EC_wf : 
   forall (m n m_hol n_hol:nat) (G_hol : lctxt m_hol) (D_hol : lctxt n_hol)
         (Et : EC_term),
@@ -551,12 +556,16 @@ Lemma tuple_cut_ren_EC_wf :
         (tuple_cut_hole_scope Et r1 r2 r1' r2').
 Proof.
   intros. inversion H; existT_eq; subst.
-  unfold tuple_cut_hole_scope, mutate_hole_scope; simpl. 
-  destruct (split_hole_scope (Ebag m0 n0 EP)) as (Et_outer & EP_hs) eqn:shsEQ.
-  induction EP_hs.
-  - unfold scoped_rvars_at_hole, case_hole_scope_at_top.
-      apply split_hole_scope_Ehol in shsEQ.
-      TODO.
+  unfold tuple_cut_hole_scope, mutate_under_hole_scope.
+  unfold scoped_rvars_at_hole, case_hole_scope_at_top, hole_scope. 
+  destruct (inv_split_hole_scope (Ebag m0 n0 EP)); dest_conj_disj_exist.
+  all: rewrite H4.
+  - apply inv_split_hole_scope_Ehol_hs in H4. rewrite H4. simpl.
+    admit.
+  - assert (H5 := H4). 
+    apply inv_split_hole_scope_Edeflam in H4. rewrite H4.
+    destruct x1. unfold compose. simpl.
+    admit. (* Need to create lemmas for plugging back in *)
 Qed.
 
 
@@ -648,6 +657,102 @@ Inductive  step : nat -> nat -> term -> term -> Prop :=
     prim_step m n t1' t2' ->
     t2' ≈t t2 ->
     step m n t1 t2.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
