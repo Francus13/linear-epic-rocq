@@ -41,30 +41,6 @@ Scheme EC_term_rec_m := Induction for EC_term Sort Set
 Combined Scheme EC_rec from EC_term_rec_m, EC_proc_rec_m.
 
 
-Inductive EP_lt : EC_proc -> EC_proc -> Prop :=
-| Edeflam_lt : forall EP r m n, 
-                EP_lt EP (Edeflam r (Ebag m n EP))
-| Epar_lt : forall EP P,
-                EP_lt EP (Epar EP P)
-| trans_EP_lt : forall EP1 EP2 EP3,
-                EP_lt EP1 EP2 ->
-                EP_lt EP2 EP3 ->
-                EP_lt EP1 EP3.
-
-Lemma foo : forall EP, ~ (EP_lt EP Ehol).
-Proof. unfold not; intros. induction EP.
-  + inversion H. Fail induction H eqn:Heq.
-
-Lemma EP_lt_wf : well_founded EP_lt.
-Proof.
-  unfold well_founded. induction a.
-  - constructor; intros. exfalso. Fail induction H eqn:Heq. admit.
-  - constructor; intros. Fail induction H eqn:Heq. admit.
-  - constructor; intros. Fail induction H eqn:Heq. admit.
-Qed.
-
-
-
 Reserved Notation "Et <=[ P ]" (at level 55).
 Reserved Notation "EP <=[ P ]p" (at level 55).
 Reserved Notation "Et <=<[ EP ]" (at level 55).
@@ -122,23 +98,100 @@ with hole_depth_proc (EP : EC_proc) : nat :=
 Definition is_hole_scope_at_top := (eqb 0) ∘ hole_depth.
 Definition is_hole_scope_at_top_proc := (eqb 0) ∘ hole_depth_proc.
 
+(* States the hole_depth of an EC is less than another *)
+Definition hole_depth_lt (Et1 Et2 : EC_term) := 
+  lt (hole_depth Et1) (hole_depth Et2).
+
+
+(* Every EC is accessible with hole_depth_lt.
+   Used to prove well-foundedness of split_hole_scope. *)
+Lemma hole_depth_lt_wf_helper : 
+  (forall (Et : EC_term), Acc hole_depth_lt Et) /\
+  (forall (EP : EC_proc) m n, Acc hole_depth_lt (Ebag m n EP)).
+Proof. 
+  apply EC_ind; intros.
+  (* Ebag is immediate by IH *)
+  - apply H.
+  (* Ehol has depth 0 and is the base case *)
+  - constructor; intros. unfold hole_depth_lt in H; simpl in H. lia.
+  (* Elam adds to depth *)
+  - constructor; intros.
+    (* Case on whether we need a new Acc layer before IH *)
+    destruct (Nat.eqb_spec (hole_depth y) (hole_depth Et)).
+    + constructor; intros. apply (Acc_inv H). 
+      unfold hole_depth_lt in *. rewrite <- e. apply H1.
+    + apply (Acc_inv H). unfold hole_depth_lt in *. simpl in H0. lia.
+  (* Epar follows from IH *)
+  - constructor; intros. specialize H with m n. apply (Acc_inv H).
+    unfold hole_depth_lt in *; auto.
+Qed.
+
+Lemma hole_depth_lt_wf : well_founded hole_depth_lt.
+Proof. unfold well_founded; apply hole_depth_lt_wf_helper. Qed.
+
+
+
+(* Given an EC, pops the top scope from the next scope containing the hole
+      (if different), returning a pair whose first element is the top scope
+      and second element is the EC process containing the next scope.
+    1) If the hole is at the top scope, returns (EC, Ehol)
+    2) If the hole is under a lambda, returns (EC_top, EC_lam) where:
+        - EC_top is the EC with the lamdef replaced with a hole
+        - EC_lam is the lamdef removed from the EC
+
+  If this function takes EC and returns (EC_top, EC_next),
+    1) Filling EC_top with EC_next will give EC.
+    2) EC_next is either Ehol or Edeflam
+    3) If EC_next is Ehol, then EC_top is EC *)
+
+Fixpoint pop_EC_scope_proc (EP : EC_proc) : EC_proc * EC_proc :=
+  match EP with
+  | Ehol => (Ehol, Ehol)    (* Hole is at the top scope *)
+  | Epar EP' P => let (EP1, EP2) := pop_EC_scope_proc EP' in   (* Recurse *)
+                      (Epar EP1 P, EP2)
+  | Edeflam _ _ => (Ehol, EP)    (* Split top and next scope *)
+  end.
+
+Definition pop_EC_scope (Et : EC_term) : EC_term * EC_proc :=
+  match Et with
+  | Ebag m n EP => let (EP1, EP2) := pop_EC_scope_proc EP in   (* Recurse *)
+                      (Ebag m n EP1, EP2)
+  end.
+
+Definition top_scope Et := match pop_EC_scope Et with (Et', _) => Et' end.
+Definition next_scope_to_hole Et := match pop_EC_scope Et with (_, EP) => EP end.
+
+
+(* pop_EC_scope reduces hole_depth *)
+Lemma pop_EC_scope_reduces_hole_depth :
+  forall Et Et' Et0 r,
+    pop_EC_scope Et = (Et0, Edeflam r Et') ->
+    hole_depth_lt Et' Et.
+Proof.
+  intro Et; unfold hole_depth_lt. destruct Et.
+  induction EP; intros; simpl in *.
+  - discriminate.
+  - injection H; intros. rewrite H0. apply Nat.lt_succ_diag_r.
+  - destruct (pop_EC_scope_proc EP). eapply IHEP. 
+    injection H; intros. rewrite H0; reflexivity.
+Defined.
+
 
 
 (* HELPER FUNCTION! ACC is the proof of accessibility for Et_cur 
     (i.e. that the hole_depth of Et_cur decreases at each call) *)
-Fixpoint split_hole_scope_builder (EP EP_acc : EC_proc) 
-                                  (Et_trav : EC_term) : EC_term * EC_proc :=
-  match EP with
-  | Ehol => match EP_acc with
-            | Edeflam _ _ => (Et_trav, EP_acc)
-            | _           => (Et_trav <=<[ EP_acc ], Ehol)
-            end
-  | Edeflam r (Ebag m n EP') => split_hole_scope_builder EP' 
-                                  (Edeflam r (Ebag m n Ehol)) 
-                                  (Et_trav <=<[ EP_acc ])
-  | Epar EP' P => split_hole_scope_builder EP' 
-                    (EP_acc <=<[ Epar Ehol P ]p) Et_trav
-  end.
+Fixpoint split_hole_scope_builder (r : rvar) (Et_acc Et_cur : EC_term) 
+        (ACC : Acc hole_depth_lt Et_cur) {struct ACC} : EC_term * EC_proc :=
+  (match pop_EC_scope Et_cur as y 
+      return (pop_EC_scope Et_cur = y) -> EC_term * EC_proc with
+  | (_, Ehol) => fun _ => (Et_acc, Edeflam r Et_cur)
+  | (Et_next, Edeflam r' Et_rest) => fun HEQ =>
+          let ACC_Et_rest := Acc_inv ACC 
+              (pop_EC_scope_reduces_hole_depth Et_cur Et_rest Et_next r' HEQ) in
+          split_hole_scope_builder r'
+              (Et_acc <=<[ Edeflam r Et_next ]) Et_rest ACC_Et_rest
+  | _ => fun _ => (Ebag 0 0 Ehol, Ehol) (* Cannot reach here *)
+  end) eq_refl.
 
 
 (* Applies pop_EC_scope until the "hole scope" is reached,
@@ -148,10 +201,17 @@ Fixpoint split_hole_scope_builder (EP EP_acc : EC_proc)
       and second element is the hole scope.
    The invariants of pop_EC_scope are also held by split_hole_scope. *)
 Definition split_hole_scope (Et : EC_term) : EC_term * EC_proc :=
-  match Et with
-  | Ebag m n EP => split_hole_scope_builder EP Ehol (Ebag m n Ehol)
+  match pop_EC_scope Et with
+  | (_, Ehol) => (Et, Ehol)
+  | (Et_acc, Edeflam r Et_cur) => split_hole_scope_builder r Et_acc Et_cur (hole_depth_lt_wf Et_cur)
+  | _ => (Ebag 0 0 Ehol, Ehol) (* Cannot reach here *)
   end.
 
+Definition bubble_hole_scope_up Et := 
+  match split_hole_scope Et with 
+  | (_, Ehol) => Ebag 0 0 Ehol
+  | (Et', _) => Et' 
+  end.
 
 Definition hole_scope Et := 
   match split_hole_scope Et with 
@@ -215,26 +275,6 @@ with rename_fvar_EC_term {m m'} (v : ren m m') (Et : EC_term) :=
 
 
 (* Lemmas for EC functions *)
-
-Lemma inv_split_hole_scope :
-      (forall (Et : EC_term),
-          (exists Et_top,
-            split_hole_scope Et = (Et_top, Ehol))
-      \/  (exists Et_top r Et_rest,
-            split_hole_scope Et = (Et_top, Edeflam r Et_rest))).
-Proof.
-  intros; destruct Et.
-  generalize dependent m; generalize dependent n.
-  induction EP; simpl; intros.
-  - left; eauto.
-  - right; destruct Et.
-Qed.
-
-
-
-
-
-
 
 Lemma inv_pop_EC_scope :
       (forall (Et : EC_term),
@@ -365,6 +405,22 @@ Proof.
   all: destruct (inv_split_hole_scope_builder Et_cur r Et_acc ACC) 
           as (Et_outer' & r' & Et_hs & H).
   all: rewrite H; discriminate.
+Qed.
+
+
+
+Lemma inv_split_hole_scope :
+      (forall (Et : EC_term),
+          (exists Et_top,
+            split_hole_scope Et = (Et_top, Ehol))
+      \/  (exists Et_top r Et_rest,
+            split_hole_scope Et = (Et_top, Edeflam r Et_rest))).
+Proof.
+  intros; unfold split_hole_scope.
+  destruct (pop_EC_scope Et); destruct e0.
+  - left; eauto.
+  - right. apply inv_split_hole_scope_builder.
+  - left; eauto.
 Qed.
 
 Lemma inv_split_hole_scope_Ehol_eq :

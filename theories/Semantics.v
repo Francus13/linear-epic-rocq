@@ -290,7 +290,7 @@ with bound_fvars_to_hole_proc EP : nat :=
   
 (* Gives the number of fvars bound before the hole scope *)
 Definition bound_fvars_before_hole_scope Et : nat :=
-  bound_fvars_to_hole (bubble_hole_scope_up Et).
+  (bound_fvars_to_hole Et) - (bound_fvars_at_hole_scope Et).
 
   
 (* Adds new bound fvars to the end of the top scope, shifting all free fvars *)
