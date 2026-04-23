@@ -737,7 +737,6 @@ Proof.
   destruct ACC; inversion H0; inversion WFP; existT_eq; subst; simpl in H1.
   (* Ehol *)
   - injection H1; intros; subst. eexists; eexists; split.
-    2: econstructor; eauto.
   (* Edeflam *)
   -
   (* Epar *)

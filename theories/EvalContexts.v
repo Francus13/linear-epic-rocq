@@ -7,7 +7,8 @@ From Stdlib Require Import
   Nat
   Program.Basics
   List
-  Lia.
+  Lia
+  Relations.
 
 From LEpic Require Import Contexts Syntax.
 Import Renamings.
@@ -41,19 +42,64 @@ Scheme EC_term_rec_m := Induction for EC_term Sort Set
 Combined Scheme EC_rec from EC_term_rec_m, EC_proc_rec_m.
 
 
-Inductive EP_lt : EC_proc -> EC_proc -> Prop :=
+Inductive EP_lt_strict : EC_proc -> EC_proc -> Prop :=
 | Edeflam_lt : forall EP r m n, 
-                EP_lt EP (Edeflam r (Ebag m n EP))
+                EP_lt_strict EP (Edeflam r (Ebag m n EP))
 | Epar_lt : forall EP P,
-                EP_lt EP (Epar EP P)
-| trans_EP_lt : forall EP1 EP2 EP3,
-                EP_lt EP1 EP2 ->
-                EP_lt EP2 EP3 ->
-                EP_lt EP1 EP3.
+                EP_lt_strict EP (Epar EP P).
 
-Lemma foo : forall EP, ~ (EP_lt EP Ehol).
-Proof. unfold not; intros. induction EP.
-  + inversion H. Fail induction H eqn:Heq.
+Print clos_trans.
+
+Definition EP_lt := clos_trans _ EP_lt_strict.
+
+
+Lemma foo : forall EP x, x = Ehol -> ~ (EP_lt EP x).
+Proof. unfold not; intros. induction H0; subst.
+  + inversion H0.
+  + auto.
+Qed.
+
+Require Import Stdlib.Program.Equality.
+
+Section EP_lt_ind.
+  Variable P : EC_proc -> Prop.
+  Hypothesis H_Ehol : P Ehol.
+  Hypothesis IH_EP_lt : forall EP, 
+                            (forall EP', EP_lt EP' EP -> P EP')
+                            -> P EP.
+
+  Lemma EP_lt_ind : forall EP, P EP.
+  Proof.
+    intros; apply IH_EP_lt.
+    induction EP'; intros.
+    - auto.
+    - destruct Et. remember (Edeflam r (Ebag m n EP)) as x. 
+      induction H; subst.
+
+
+
+    - apply foo in H; auto. destruct H.
+    - destruct Et. remember (Edeflam r (Ebag m n EP)) as x. 
+      induction H; subst.
+      + inversion H; subst. apply IH_EP_lt.
+
+
+    
+    induction EP'; auto; intros.
+  Qed.
+
+End EP_lt_ind.
+
+
+Lemma foo : forall EP x, x = Ehol -> ~ (EP_lt EP x).
+Proof. unfold not; intros. dependent induction H.
+  + inversion H. Fail induction H eqn:Heq. admit.
+  + admit.
+  + admit.
+Admitted.
+
+
+
 
 Lemma EP_lt_wf : well_founded EP_lt.
 Proof.
