@@ -42,72 +42,64 @@ Scheme EC_term_rec_m := Induction for EC_term Sort Set
 Combined Scheme EC_rec from EC_term_rec_m, EC_proc_rec_m.
 
 
-Inductive EP_lt_strict : EC_proc -> EC_proc -> Prop :=
-| Edeflam_lt : forall EP r m n, 
-                EP_lt_strict EP (Edeflam r (Ebag m n EP))
-| Epar_lt : forall EP P,
-                EP_lt_strict EP (Epar EP P).
 
-Print clos_trans.
+Fixpoint EP_size EP :=
+  match EP with
+  | Ehol => 0
+  | Edeflam _ (Ebag _ _ EP') => 1 + EP_size EP'
+  | Epar EP' _ => 1 + EP_size EP'
+  end.
 
-Definition EP_lt := clos_trans _ EP_lt_strict.
-
-
-Lemma foo : forall EP x, x = Ehol -> ~ (EP_lt EP x).
-Proof. unfold not; intros. induction H0; subst.
-  + inversion H0.
-  + auto.
-Qed.
-
-Require Import Stdlib.Program.Equality.
-
-Section EP_lt_ind.
-  Variable P : EC_proc -> Prop.
-  Hypothesis H_Ehol : P Ehol.
-  Hypothesis IH_EP_lt : forall EP, 
-                            (forall EP', EP_lt EP' EP -> P EP')
-                            -> P EP.
-
-  Lemma EP_lt_ind : forall EP, P EP.
-  Proof.
-    intros; apply IH_EP_lt.
-    induction EP'; intros.
-    - auto.
-    - destruct Et. remember (Edeflam r (Ebag m n EP)) as x. 
-      induction H; subst.
-
-
-
-    - apply foo in H; auto. destruct H.
-    - destruct Et. remember (Edeflam r (Ebag m n EP)) as x. 
-      induction H; subst.
-      + inversion H; subst. apply IH_EP_lt.
-
-
-    
-    induction EP'; auto; intros.
-  Qed.
-
-End EP_lt_ind.
-
-
-Lemma foo : forall EP x, x = Ehol -> ~ (EP_lt EP x).
-Proof. unfold not; intros. dependent induction H.
-  + inversion H. Fail induction H eqn:Heq. admit.
-  + admit.
-  + admit.
-Admitted.
-
-
-
+Definition EP_lt EP1 EP2 := lt (EP_size EP1) (EP_size EP2).
 
 Lemma EP_lt_wf : well_founded EP_lt.
 Proof.
-  unfold well_founded. induction a.
-  - constructor; intros. exfalso. Fail induction H eqn:Heq. admit.
-  - constructor; intros. Fail induction H eqn:Heq. admit.
-  - constructor; intros. Fail induction H eqn:Heq. admit.
+  unfold well_founded; intros. constructor; intros.
+  induction a.
+  - inversion H.
+  -
 Qed.
+
+(* Inductive EC_lt_strict : (EC_term + EC_proc) -> (EC_term + EC_proc) -> Prop :=
+| Ebag_lt : forall EP m n, 
+                EC_lt_strict (inr EP) (inl (Ebag m n EP))
+| Edeflam_lt : forall Et r, 
+                EC_lt_strict (inl Et) (inr (Edeflam r Et))
+| Epar_lt : forall EP P,
+                EC_lt_strict (inr EP) (inr (Epar EP P)).
+
+Definition EC_lt := clos_trans _ EC_lt_strict.
+
+Lemma EC_lt_wf_helper :
+    (forall Et, Acc EC_lt (inl Et))
+/\  (forall EP, Acc EC_lt (inr EP)).
+Proof.
+  apply EC_ind; intros; constructor; intros.
+  (* Ebag, Edeflam, and Epar are the same *)
+  - remember (inl (Ebag m n EP)) as x; induction H0; subst.
+    + inversion H0; auto.
+    + apply (Acc_inv (IHclos_trans2 eq_refl)). apply H0_.
+  (* Ehol is a base case *)
+  - exfalso. remember (inr (Ehol)) as x; induction H; subst.
+    + inversion H.
+    + auto.
+  - remember (inr (Edeflam r Et)) as x; induction H0; subst.
+    + inversion H0; auto.
+    + apply (Acc_inv (IHclos_trans2 eq_refl)). auto.
+  - remember (inr (Epar EP P)) as x; induction H0; subst.
+    + inversion H0; auto.
+    + apply (Acc_inv (IHclos_trans2 eq_refl)). auto.
+Qed.
+
+Lemma EC_lt_wf : well_founded EC_lt.
+Proof. unfold well_founded. intros; destruct a; apply EC_lt_wf_helper. Qed.
+Definition EC_lt_ind := well_founded_induction EC_lt_wf.
+
+
+Definition EP_lt EP1 := (EC_lt (inr EP1)) ∘ inr.
+Lemma EP_lt_wf : well_founded EP_lt.
+unfold well_founded, EP_lt. intros. constructor; intros.
+Admitted. *)
 
 
 
@@ -269,9 +261,8 @@ Lemma inv_split_hole_scope :
       \/  (exists Et_top r Et_rest,
             split_hole_scope Et = (Et_top, Edeflam r Et_rest))).
 Proof.
-  intros; destruct Et.
-  generalize dependent m; generalize dependent n.
-  induction EP; simpl; intros.
+  intros. destruct Et; simpl.
+  induction (@inr EC_term EC_proc EP) using EC_lt_ind. ; simpl; intros.
   - left; eauto.
   - right; destruct Et.
 Qed.
