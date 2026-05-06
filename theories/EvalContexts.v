@@ -147,23 +147,20 @@ Definition get_proc_Et Et := match Et with Ebag _ _ EP => EP end.
 
 
 
-(* Gives the number of lambda bindings encountered when traversing 
-      to the hole (i.e. how many scopes deep the hole is) *)
-Fixpoint hole_depth Et := hole_depth_proc (get_proc_Et Et)
-with hole_depth_proc (EP : EC_proc) : nat :=
+(* Returns true if the hole is not underneath a lambda binding.
+   Otherwise returns false. *)
+Fixpoint is_hole_scope_at_top Et := is_hole_scope_at_top_proc (get_proc_Et Et)
+with is_hole_scope_at_top_proc EP := 
   match EP with
-  | Ehol => 0
-  | Edeflam _ Et => 1 + hole_depth Et
-  | Epar EP' _ => hole_depth_proc EP'
+  | Ehol => true
+  | Edeflam _ _ => false
+  | Epar EP' _ => is_hole_scope_at_top_proc EP'
   end.
 
-Definition is_hole_scope_at_top := (eqb 0) ∘ hole_depth.
-Definition is_hole_scope_at_top_proc := (eqb 0) ∘ hole_depth_proc.
 
 
-
-(* HELPER FUNCTION! ACC is the proof of accessibility for Et_cur 
-    (i.e. that the hole_depth of Et_cur decreases at each call) *)
+(* HELPER FUNCTION! for split_hole_scope.
+ *)
 Fixpoint split_hole_scope_builder (EP EP_acc : EC_proc) 
                                   (Et_trav : EC_term) : EC_term * EC_proc :=
   match EP with
@@ -254,6 +251,35 @@ with rename_fvar_EC_term {m m'} (v : ren m m') (Et : EC_term) :=
 
 (* Lemmas for EC functions *)
 
+Lemma commute_fill :
+    (forall Et EP P,  Et <=<[ EP ] <=[ P ] = 
+                      Et <=[ EP <=[ P ]p ])
+/\  (forall EP EP' P, EP <=<[ EP' ]p <=[ P ]p = 
+                      EP <=[ EP' <=[ P ]p ]p).
+Proof. apply EC_ind; simpl; intros; try rewrite H; auto. Qed.
+
+Lemma commute_EC_fill :
+    (forall Et EP1 EP2, Et <=<[ EP1 ] <=<[ EP2 ] = 
+                        Et <=<[ EP1 <=<[ EP2 ]p ])
+/\  (forall EP EP1 EP2, EP <=<[ EP1 ]p <=<[ EP2 ]p = 
+                        EP <=<[ EP1 <=<[ EP2 ]p ]p).
+Proof. apply EC_ind; simpl; intros; try rewrite H; auto. Qed.
+
+Lemma commute_fill_term : forall Et EP P,
+  Et <=<[ EP ] <=[ P ] = Et <=[ EP <=[ P ]p ].
+Proof. apply commute_fill. Qed.
+Lemma commute_fill_proc : forall EP EP' P,
+  EP <=<[ EP' ]p <=[ P ]p = EP <=[ EP' <=[ P ]p ]p.
+Proof. apply commute_fill. Qed.
+Lemma commute_EC_fill_term : forall Et EP1 EP2,
+  Et <=<[ EP1 ] <=<[ EP2 ] = Et <=<[ EP1 <=<[ EP2 ]p ].
+Proof. apply commute_EC_fill. Qed.
+Lemma commute_EC_fill_proc : forall EP EP1 EP2,
+  EP <=<[ EP1 ]p <=<[ EP2 ]p = EP <=<[ EP1 <=<[ EP2 ]p ]p.
+Proof. apply commute_EC_fill. Qed.
+
+
+
 Lemma shift_Ehol_fill : 
     (forall Et, Et <=<[ Ehol ] = Et)
 /\  (forall EP, EP <=<[ Ehol ]p = EP).
@@ -294,6 +320,49 @@ Ltac shift_fill_left :=
   repeat rewrite shift_Ehol_fill_term; repeat rewrite shift_Ehol_fill_proc;
   try rewrite shift_Edeflam_fill_term; try rewrite shift_Edeflam_fill_proc;
   try rewrite shift_Epar_fill_term; try rewrite shift_Epar_fill_proc.
+
+
+
+Lemma meet_hole_scope_at_top :
+    (forall Et EP, is_hole_scope_at_top Et = true ->
+                    is_hole_scope_at_top_proc EP = true ->
+                    is_hole_scope_at_top (Et <=<[ EP ]) = true)
+/\  (forall EP EP', is_hole_scope_at_top_proc EP = true ->
+                    is_hole_scope_at_top_proc EP' = true ->
+                    is_hole_scope_at_top_proc (EP <=<[ EP' ]p) = true).
+Proof. apply EC_ind; simpl; intros; try apply H; auto. Qed.
+
+Lemma join_hole_scope_at_top :
+    (forall Et EP, (is_hole_scope_at_top Et = false \/
+                    is_hole_scope_at_top_proc EP = false) ->
+                    is_hole_scope_at_top (Et <=<[ EP ]) = false)
+/\  (forall EP EP', (is_hole_scope_at_top_proc EP = false \/
+                    is_hole_scope_at_top_proc EP' = false) ->
+                    is_hole_scope_at_top_proc (EP <=<[ EP' ]p) = false).
+Proof. 
+  apply EC_ind; simpl; intros; try apply H; auto. 
+  destruct H; auto. discriminate H.
+Qed.
+
+Lemma meet_hole_scope_at_top_term : forall Et EP, is_hole_scope_at_top Et = true ->
+  is_hole_scope_at_top_proc EP = true -> is_hole_scope_at_top (Et <=<[ EP ]) = true.
+Proof. apply meet_hole_scope_at_top. Qed.
+Lemma meet_hole_scope_at_top_proc: forall EP EP', is_hole_scope_at_top_proc EP = true ->
+  is_hole_scope_at_top_proc EP' = true -> is_hole_scope_at_top_proc (EP <=<[ EP' ]p) = true.
+Proof. apply meet_hole_scope_at_top. Qed.
+Lemma left_join_hole_scope_at_top_term : forall Et EP, 
+  is_hole_scope_at_top Et = false -> is_hole_scope_at_top (Et <=<[ EP ]) = false.
+Proof. intros; apply join_hole_scope_at_top. auto. Qed.
+Lemma right_join_hole_scope_at_top_term : forall Et EP, 
+  is_hole_scope_at_top_proc EP = false -> is_hole_scope_at_top (Et <=<[ EP ]) = false.
+Proof. intros; apply join_hole_scope_at_top. auto. Qed.
+Lemma left_join_hole_scope_at_top_proc : forall EP EP', 
+  is_hole_scope_at_top_proc EP = false -> is_hole_scope_at_top_proc (EP <=<[ EP' ]p) = false.
+Proof. intros; apply join_hole_scope_at_top. auto. Qed.
+Lemma right_join_hole_scope_at_top_proc : forall EP EP', 
+  is_hole_scope_at_top_proc EP' = false -> is_hole_scope_at_top_proc (EP <=<[ EP' ]p) = false.
+Proof. intros; apply join_hole_scope_at_top. auto. Qed.
+
 
 
 Ltac split_hole_scope_generalize EP :=
@@ -356,19 +425,19 @@ Proof.
 Qed.
 
 
-
-
-TODO
-
 Lemma inv_split_hole_scope_Ehol_hs :
   forall (Et Et_top : EC_term),
     split_hole_scope Et = (Et_top, Ehol) ->
     is_hole_scope_at_top Et = true.
 Proof.
-  intro Et; destruct (inv_pop_EC_scope_term Et); dest_conj_disj_exist.
-  all: unfold split_hole_scope; rewrite H; intros.
-  - eapply inv_pop_EC_scope_Ehol_hs. eauto.
-  - apply inv_split_hole_scope_builder_Ehol_Epar in H0. destruct H0.
+  intro Et; destruct Et as [m n EP0]; simpl.
+  enough (forall (EP EP_acc : EC_proc) (Et_trav Et_top : EC_term),
+            split_hole_scope_builder EP EP_acc Et_trav = (Et_top, Ehol) ->
+            is_hole_scope_at_top_proc EP = true); try apply H.
+  EP_ind_unsafe IH EP; simpl; intros.
+  - reflexivity.
+  - now apply split_hole_scope_builder_Edeflam_acc in H2.
+  - eapply IH; apply H.
 Qed.
 
 Lemma inv_split_hole_scope_Edeflam :
@@ -376,10 +445,16 @@ Lemma inv_split_hole_scope_Edeflam :
     split_hole_scope Et = (Et_top, Edeflam r Et_rest) ->
     is_hole_scope_at_top Et = false.
 Proof.
-  intro Et; destruct (inv_pop_EC_scope_term Et); dest_conj_disj_exist.
-  all: unfold split_hole_scope; rewrite H; intros.
-  - discriminate H0.
-  - eapply inv_pop_EC_scope_Edeflam. eauto.
+  intro Et; destruct Et as [m n EP0]; simpl.
+  enough (forall (EP EP_acc : EC_proc) (Et_trav Et_top : EC_term) r Et_rest,
+            split_hole_scope_builder EP EP_acc Et_trav = (Et_top, Edeflam r Et_rest) ->
+            is_hole_scope_at_top_proc EP_acc = true ->
+            is_hole_scope_at_top_proc EP = false); try (intros; eapply H; eauto).
+  EP_ind_unsafe IH EP; simpl; intros.
+  - destruct EP_acc; try discriminate H. discriminate H0.
+  - reflexivity.
+  - eapply IH; try apply H. 
+    apply meet_hole_scope_at_top_proc; auto.
 Qed.
 
 
@@ -453,39 +528,121 @@ Scheme wf_EC_term_ind := Induction for wf_EC_term Sort Prop
 Combined Scheme wf_EC_ind from wf_EC_term_ind, wf_EC_proc_ind.
 
 
+
+(* Prove that EC well-formedness respects context equivalence. *)
+Lemma EC_equiv_wf :
+  (forall m n m_hol n_hol G1_hol D1_hol Et,
+    wf_EC_term m n m_hol n_hol G1_hol D1_hol Et ->
+      forall G2_hol D2_hol,
+    G1_hol ≡[m_hol] G2_hol ->
+    D1_hol ≡[n_hol] D2_hol ->
+      wf_EC_term m n m_hol n_hol G2_hol D2_hol Et)
+  /\
+  (forall m n m_hol n_hol G1 D1 G1_hol D1_hol EP,
+    wf_EC_proc m n m_hol n_hol G1 D1 G1_hol D1_hol EP ->
+      forall G2 D2 G2_hol D2_hol,
+    G1 ≡[m] G2 ->
+    D1 ≡[n] D2 ->
+    G1_hol ≡[m_hol] G2_hol ->
+    D1_hol ≡[n_hol] D2_hol ->
+      wf_EC_proc m n m_hol n_hol G2 D2 G2_hol D2_hol EP).
+Proof.
+  apply wf_EC_ind; intros.
+  - econstructor; eauto. apply H; auto; reflexivity.
+  - econstructor; do 2 (eapply transitivity; eauto); symmetry; auto.
+  - econstructor; auto; eapply transitivity; eauto; symmetry; auto.
+  - econstructor; eauto.
+    2, 3: eapply transitivity; eauto; symmetry; auto.
+    apply H; auto; reflexivity.
+Qed.  
+
+#[global] Instance Proper_wf_EC_term {m n m_hol n_hol : nat} : 
+  Proper ((@ctxt_eq nat m_hol) ==> (@ctxt_eq nat n_hol) ==> 
+            eq ==> iff) (wf_EC_term m n m_hol n_hol).
+Proof. repeat red; intros; subst. split; intros.
+  - eapply EC_equiv_wf; eauto.
+  - symmetry in H, H0. eapply EC_equiv_wf; eauto. Qed.
+
+#[global] Instance Proper_wf_EC_proc {m n m_hol n_hol : nat} : 
+  Proper ((@ctxt_eq nat m) ==> (@ctxt_eq nat n) ==> 
+          (@ctxt_eq nat m_hol) ==> (@ctxt_eq nat n_hol) ==> 
+            eq ==> iff) (wf_EC_proc m n m_hol n_hol).
+Proof. repeat red; intros; subst. split; intros.
+  - eapply EC_equiv_wf; eauto.
+  - symmetry in H, H0, H1, H2. eapply EC_equiv_wf; eauto. Qed.
+
+
+
 (* Filling an EC preserves well-formedness *)
-Lemma fill_EC_wf_pres :
+Lemma fill_wf_pres :
       (forall m n m_hol n_hol G_hol D_hol Et,
         wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
-        forall (P : proc),
+        forall P,
           wf_proc m_hol n_hol G_hol D_hol P ->
         wf_term m n (Et <=[ P ]))
   /\  (forall m n m_hol n_hol G D G_hol D_hol EP, 
         wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP ->
-        forall (P : proc),
+        forall P,
           wf_proc m_hol n_hol G_hol D_hol P ->
         wf_proc m n G D (EP <=[ P ]p)).
 Proof.
   apply wf_EC_ind; intros.
     (* Most cases are immediate or by IH *)
-  all: try solve [try econstructor; try apply WFP2; try rewrite HG, HD; auto].
+  all: try solve [
+    try econstructor; try apply WFP2; try rewrite HG, HD; auto
+  ].
     (* Edeflam *)
   - simpl. apply wf_def with (D' := zero n); auto.
     + rewrite sum_zero_r. auto.
     + apply wf_lam; auto. reflexivity.
 Qed.
 
-Lemma fill_EC_wf_pres_term : forall m n m_hol n_hol G_hol D_hol Et,
+Lemma EC_fill_wf_pres :
+      (forall m n m_hol n_hol G_hol D_hol Et,
+        wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
+        forall EP m_hol' n_hol' G_hol' D_hol',
+          wf_EC_proc m_hol n_hol m_hol' n_hol' G_hol D_hol G_hol' D_hol' EP ->
+        wf_EC_term m n m_hol' n_hol' G_hol' D_hol' (Et <=<[ EP ]))
+  /\  (forall m n m_hol n_hol G D G_hol D_hol EP, 
+        wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP ->
+        forall EP' m_hol' n_hol' G_hol' D_hol',
+          wf_EC_proc m_hol n_hol m_hol' n_hol' G_hol D_hol G_hol' D_hol' EP' ->
+        wf_EC_proc m n m_hol' n_hol' G D G_hol' D_hol' (EP <=<[ EP' ]p)).
+Proof.
+  apply wf_EC_ind; intros.
+    (* All cases are immediate or by IH *)
+  all: try econstructor; try apply WFP2; simpl; 
+        try rewrite HG, HD; simpl; auto.
+Qed.
+
+Lemma fill_wf_pres_term : forall m n m_hol n_hol G_hol D_hol Et,
   wf_EC_term m n m_hol n_hol G_hol D_hol Et -> forall (P : proc),
   wf_proc m_hol n_hol G_hol D_hol P -> wf_term m n (Et <=[ P ]).
-Proof. apply fill_EC_wf_pres. Qed.
-Lemma fill_EC_wf_pres_proc : forall m n m_hol n_hol G D G_hol D_hol EP, 
+Proof. apply fill_wf_pres. Qed.
+Lemma fill_wf_pres_proc : forall m n m_hol n_hol G D G_hol D_hol EP, 
   wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP -> forall (P : proc),
   wf_proc m_hol n_hol G_hol D_hol P -> wf_proc m n G D (EP <=[ P ]p).
-Proof. apply fill_EC_wf_pres. Qed.
+Proof. apply fill_wf_pres. Qed.
+Lemma EC_fill_wf_pres_term : forall m n m_hol n_hol G_hol D_hol Et,
+  wf_EC_term m n m_hol n_hol G_hol D_hol Et -> forall EP m_hol' n_hol' G_hol' D_hol',
+  wf_EC_proc m_hol n_hol m_hol' n_hol' G_hol D_hol G_hol' D_hol' EP ->
+  wf_EC_term m n m_hol' n_hol' G_hol' D_hol' (Et <=<[ EP ]).
+Proof. apply EC_fill_wf_pres. Qed.
+Lemma EC_fill_wf_pres_proc : forall m n m_hol n_hol G D G_hol D_hol EP, 
+  wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP -> forall EP' m_hol' n_hol' G_hol' D_hol',
+  wf_EC_proc m_hol n_hol m_hol' n_hol' G_hol D_hol G_hol' D_hol' EP' ->
+  wf_EC_proc m n m_hol' n_hol' G D G_hol' D_hol' (EP <=<[ EP' ]p).
+Proof. apply EC_fill_wf_pres. Qed.
 
 
-Lemma drill_term_wf_pres :
+
+Ltac finish_by_IH_inv_prem H WF := 
+      apply H in WF;
+      destruct WF as (m_hol & n_hol & G_hol & D_hol & WF1 & WF2);
+      exists m_hol, n_hol, G_hol, D_hol; split; auto;
+      econstructor; eauto.
+
+Lemma inv_fill_wf :
   (forall Et P m n,
       wf_term m n (Et <=[ P ]) ->
       exists m_hol n_hol 
@@ -495,77 +652,45 @@ Lemma drill_term_wf_pres :
   /\
   (forall EP P m n (G : lctxt m) (D : lctxt n),
       wf_proc m n G D (EP <=[ P ]p) ->
-      exists m_hol n_hol 
-        (G_hol : lctxt m_hol) (D_hol : lctxt n_hol),
+      exists m_hol n_hol G_hol D_hol,
       wf_proc m_hol n_hol G_hol D_hol P /\
       wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP).
 Proof.
   apply EC_ind; intros.
-  Ltac drill_by_IH H WF := 
-        apply H in WF;
-        destruct WF as (m_hol & n_hol & G_hol & D_hol & WF1 & WF2);
-        exists m_hol, n_hol, G_hol, D_hol; split; auto;
-        econstructor; eauto.
     (* Ebag *)
-  - inversion H0; subst. drill_by_IH H WFP.
+  - inversion H0; subst. finish_by_IH_inv_prem H WFP.
     (* Ehol *)
   - exists m, n, G, D. split; auto. econstructor; reflexivity.
     (* Edeflam *)
-  - inversion H0; inversion WFO; existT_eq; subst. drill_by_IH H WFT.
+  - inversion H0; inversion WFO; existT_eq; subst. finish_by_IH_inv_prem H WFT.
     rewrite HD, HD0, sum_zero_r; reflexivity.
     (* Epar *)
-  - inversion H0; existT_eq; subst. drill_by_IH H WFP1.
+  - inversion H0; existT_eq; subst. finish_by_IH_inv_prem H WFP1.
 Qed.
 
-
-(* Prove that well-formedness respects context equivalence. *)
-Lemma EC_equiv_wf :
-(* The first element is trivial, but allows using wf_tpo_ind *)
-  (forall m n m_hol n_hol G_hol1 D_hol1 Et,
-    wf_EC_term m n m_hol n_hol G_hol1 D_hol1 Et ->
-    forall G_hol2 D_hol2,
-      G_hol1 ≡[m_hol] G_hol2 ->
-      D_hol1 ≡[n_hol] D_hol2 ->
-    wf_EC_term m n m_hol n_hol G_hol2 D_hol2 Et)
-  /\
-  (forall m n m_hol n_hol G1 D1 G_hol1 D_hol1 EP,
-    wf_EC_proc m n m_hol n_hol G1 D1 G_hol1 D_hol1 EP ->
-    forall G2 D2 G_hol2 D_hol2,
-      G1 ≡[m] G2 ->
-      D1 ≡[n] D2 ->
-      G_hol1 ≡[m_hol] G_hol2 ->
-      D_hol1 ≡[n_hol] D_hol2 ->
-    wf_EC_proc m n m_hol n_hol G2 D2 G_hol2 D_hol2 EP).
+Lemma inv_EC_fill_wf :
+    (forall Et EP m n m_hol' n_hol' G_hol' D_hol',
+      wf_EC_term m n m_hol' n_hol' G_hol' D_hol' (Et <=<[ EP ]) ->
+      exists m_hol n_hol G_hol D_hol,
+      wf_EC_proc m_hol n_hol m_hol' n_hol' G_hol D_hol G_hol' D_hol' EP /\
+      wf_EC_term m n m_hol n_hol G_hol D_hol Et)
+/\  (forall EP EP' m n m_hol' n_hol' G D G_hol' D_hol',
+      wf_EC_proc m n m_hol' n_hol' G D G_hol' D_hol' (EP <=<[ EP' ]p) ->
+      exists m_hol n_hol G_hol D_hol,
+      wf_EC_proc m_hol n_hol m_hol' n_hol' G_hol D_hol G_hol' D_hol' EP' /\
+      wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP).
 Proof.
-  apply wf_EC_ind; intros.
-  (* All cases are by transitivity (the rewrites).
-     Most cases are one transitivity and IH *)
-  all: try solve [
-    try rewrite H0, H1 in *; econstructor; eauto; try (eapply H; auto; reflexivity)
-  ].
-  (* Ehol is by two transitivities. *)
-  - econstructor; eauto.
-    + rewrite <- H, HG, H1; reflexivity.
-    + rewrite <- H0, HD, H2; reflexivity.
+  apply EC_ind; intros.
+    (* Ebag *)
+  - inversion H0; existT_eq; subst. finish_by_IH_inv_prem H WFP.
+    (* Ehol *)
+  - exists m, n, G, D. split; auto. econstructor; reflexivity.
+    (* Edeflam *)
+  - inversion H0; inversion WFT; existT_eq; subst. finish_by_IH_inv_prem H WFT.
+    (* Epar *)
+  - inversion H0; existT_eq; subst. finish_by_IH_inv_prem H WFP1.
 Qed.
 
-#[global] Instance Proper_wf_EC_term {m n m_hol n_hol: nat}: Proper ((@ctxt_eq nat m_hol) ==> (@ctxt_eq nat n_hol) ==> eq ==> iff) (wf_EC_term m n m_hol n_hol).
-Proof.
-  repeat red; intros; subst.
-  split; intros.
-  - eapply EC_equiv_wf; eauto.
-  - symmetry in H, H0.
-    eapply EC_equiv_wf; eauto.
-Qed.
-
-#[global] Instance Proper_wf_EC_proc {m n m_hol n_hol: nat} : Proper ((@ctxt_eq nat m) ==> (@ctxt_eq nat n) ==> (@ctxt_eq nat m_hol) ==> (@ctxt_eq nat n_hol) ==> eq ==> iff) (wf_EC_proc m n m_hol n_hol).
-Proof.
-  repeat red; intros; subst.
-  split; intros.
-  - eapply EC_equiv_wf; eauto.
-  - symmetry in H, H0, H1, H2.
-    eapply EC_equiv_wf; eauto.
-Qed.
 
 
 (* The rvar hole context has a maximum binding of 2 *)
@@ -603,74 +728,40 @@ Qed.
 
 (* Preservation Lemmas about EC Functions *)
 
-(* If an EC is wf, then popping a scope gives
-    two wf ECs (the top scope and the remainder) *)
-Lemma pop_EC_scope_pres :
-      (forall m n m_hol n_hol G_hol D_hol Et,
-        wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
-      forall Et_top r Et_rest,
-        pop_EC_scope Et = (Et_top, Edeflam r Et_rest) ->
-        let m_inner := get_fvars_Et Et + m in
-        let n_inner := get_rvars_Et Et + n in
-            wf_EC_term m n m_inner n_inner (zero m_inner) (one n_inner r) Et_top
-        /\  wf_EC_term m_inner 1 m_hol n_hol G_hol D_hol Et_rest)
-  /\  (forall m n m_hol n_hol G D G_hol D_hol EP, 
-        wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP ->
-      forall EP_top r Et_rest,
-        pop_EC_scope_proc EP = (EP_top, Edeflam r Et_rest) ->
-            wf_EC_proc m n m n G D (zero m) (one n r) EP_top
-        /\  wf_EC_term m 1 m_hol n_hol G_hol D_hol Et_rest). 
-Proof.
-  apply wf_EC_ind; simpl; intros.
-  (* Ebag *)
-  - destruct (pop_EC_scope_proc EP). injection H0; intros; subst. split.
-    + econstructor; eauto. now eapply H.
-    + now eapply H.
-  (* Ehol *)
-  - discriminate H.
-  (* Edeflam *)
-  - injection H0; intros; subst. split.
-    + constructor; auto.
-    + auto.
-  (* Epar *)
-  - destruct (pop_EC_scope_proc EP). injection H0; intros; subst. split.
-    + econstructor; eauto. now eapply H.
-    + now eapply H.
-Qed.
-
 (* If an EC is wf, then splitting it at its hole scope gives
-    two wf ECs (the accumulated EC and the hole scope) *)
-Lemma split_hole_scope_builder_pres :
-      (forall m n m_hol n_hol G_hol D_hol Et,
-        wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
-      forall r' Et_top ACC Et_acc r Et_hs,
-        split_hole_scope_builder r' Et_top Et ACC = (Et_acc, Edeflam r Et_hs) ->
-        exists m_acc n_acc,
-            wf_EC_term m n m_acc n_acc (zero m_acc) (one n_acc r) Et_acc
-        /\  wf_EC_term m_acc 1 m_hol n_hol G_hol D_hol Et_hs).
+    two wf ECs (the accumulated Et_top and the hole scope Et_hs) *)
+Lemma split_hole_scope_pres :
+  forall Et m n m_hol n_hol G_hol D_hol,
+    wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
+  forall Et_top r Et_hs,
+    split_hole_scope Et = (Et_top, Edeflam r Et_hs) ->
+    exists m_top n_top,
+        wf_EC_term m n m_top n_top (zero m_top) (one n_top r) Et_top
+    /\  wf_EC_term m_top 1 m_hol n_hol G_hol D_hol Et_hs.
 Proof.
-  induction Et using (well_founded_induction hole_depth_lt_wf); intros.
-  destruct ACC; inversion H0; inversion WFP; existT_eq; subst; simpl in H1.
-  (* Ehol *)
-  - injection H1; intros; subst. eexists; eexists; split.
-    2: econstructor; eauto.
-  (* Edeflam *)
-  -
-  (* Epar *)
-  -
-
-
-  
-  induction Et_cur using (well_founded_induction hole_depth_lt_wf).
-  destruct Et_cur; destruct EP; intros; destruct ACC.
-  - simpl. now repeat eexists.
-  - apply (H Et). unfold hole_depth_lt; auto.
-  - unfold split_hole_scope_builder. fold split_hole_scope_builder.
-    generalize (pop_EC_scope_reduces_hole_depth (Ebag m n (Epar EP P)))
-        as pf_HD.
-    destruct (inv_pop_EC_scope_term (Ebag m n (Epar EP P))).
-    all: dest_conj_disj_exist; rewrite H0; clear H0; intros.
-    + now repeat eexists.
-    + apply (H x1 (pf_HD x1 x x0 eq_refl) _ _ _).
+  intro Et; destruct Et as [m0 n0 EP0]; simpl.
+  enough (
+      forall EP EP_acc Et_trav Et_top r Et_hs m n m_hol n_hol G_hol D_hol,
+        wf_EC_term m n m_hol n_hol G_hol D_hol (Et_trav <=<[ EP_acc ] <=<[ EP ]) ->
+        split_hole_scope_builder EP EP_acc Et_trav = (Et_top, Edeflam r Et_hs) ->
+        exists m_top n_top,
+            wf_EC_term m n m_top n_top (zero m_top) (one n_top r) Et_top
+        /\  wf_EC_term m_top 1 m_hol n_hol G_hol D_hol Et_hs
+    ).
+  1: intros; eapply H; eauto; simpl; auto.
+  EP_ind_unsafe IH EP; simpl; intros.
+  - destruct EP_acc; try discriminate H0.
+    injection H0; intros; subst.
+    rewrite shift_Ehol_fill_term in H.
+    apply inv_EC_fill_wf in H. dest_conj_disj_exist.
+    inversion H; existT_eq; subst.
+    rewrite HG, HD in H1. eauto.
+  - rewrite shift_Edeflam_fill_term in H2.
+    eapply IH; eauto.
+  - rewrite shift_Epar_fill_term in H.
+    repeat rewrite commute_EC_fill_term in H.
+    rewrite <- commute_EC_fill_proc, <- commute_EC_fill_term in H.
+    eapply IH; eauto.
 Qed.
+
 

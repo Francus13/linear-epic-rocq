@@ -458,7 +458,7 @@ Inductive prim_step : term -> term -> Prop :=
 
 (* Preservation of functions for prim_step *)
 
-Ltac drill_wf H := apply drill_term_wf_pres in H;
+Ltac destr_inv_fill_wf H := apply inv_fill_wf in H;
   destruct H as (m_hol & n_hol & G_hol & D_hol & H1 & H2).
 
 Ltac rewrite_ctxt_equivs :=
@@ -586,7 +586,7 @@ Lemma wf_prim_step_nul :
     wf_term m n (Et <=[ par P nul ]) ->
     wf_term m n (Et <=[ P ]).
 Proof.
-  intros. drill_wf H. eapply fill_EC_wf_pres_term; eauto.
+  intros. destr_inv_fill_wf H. eapply fill_wf_pres_term; eauto.
   inversion H1; inversion WFP2; existT_eq; subst; rewrite_ctxt_equivs.
   repeat rewrite sum_zero_r; auto.
 Qed.
@@ -596,7 +596,7 @@ Lemma wf_prim_step_emp :
     wf_term m n (Et <=[ par (def r emp) (def r emp) ]) ->
     wf_term m n (Et <=[ nul ]).
 Proof.
-  intros. drill_wf H.
+  intros. destr_inv_fill_wf H.
   inversion H1; inversion WFP1; inversion WFP2; inversion WFO; 
     inversion WFO0; existT_eq; subst; rewrite_ctxt_equivs; 
     clear H1 WFP1 WFP2 WFO WFO0.
@@ -604,7 +604,7 @@ Proof.
   unfold one in H2; rewrite delta_sum in H2; simpl in H2.
   assert ((zero n_hol) r = 0) as Z by auto.
   eapply rem_hole_rvar_EC_wf in H2; try exact Z; auto.
-  - eapply fill_EC_wf_pres_term; eauto. constructor; reflexivity.
+  - eapply fill_wf_pres_term; eauto. constructor; reflexivity.
   - rewrite sum_zero_l; reflexivity.
 Qed.
 
@@ -614,7 +614,7 @@ Lemma wf_prim_step_tup :
     wf_term m n (Et <=[ par (def r (tup r1 r2)) (def r (tup r1' r2')) ]) ->
     wf_term m n ((tuple_cut_hole_scope Et r1 r2 r1' r2') <=[ nul ]).
 Proof.
-  intros. drill_wf H.
+  intros. destr_inv_fill_wf H.
   inversion H1; inversion WFP1; inversion WFP2; inversion WFO; 
     inversion WFO0; existT_eq; subst; rewrite_ctxt_equivs; 
     clear H1 WFP1 WFP2 WFO WFO0.
@@ -632,7 +632,7 @@ Proof.
       destruct (lt_dec r n_hol); destruct (Nat.eq_dec r r); lia. }
 Admitted.
   (* eapply rem_hole_rvar_EC_wf in H2; try exact Z; auto.
-  - eapply fill_EC_wf_pres_term; eauto. constructor; reflexivity.
+  - eapply fill_wf_pres_term; eauto. constructor; reflexivity.
   - unfold delta, sum, ctxt_eq; intros; lia.
 
 
