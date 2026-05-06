@@ -254,10 +254,47 @@ with rename_fvar_EC_term {m m'} (v : ren m m') (Et : EC_term) :=
 
 (* Lemmas for EC functions *)
 
-Lemma Ehol_fill_id : 
+Lemma shift_Ehol_fill : 
     (forall Et, Et <=<[ Ehol ] = Et)
 /\  (forall EP, EP <=<[ Ehol ]p = EP).
 Proof. apply EC_ind; simpl; intros; try rewrite H; auto. Qed.
+
+Lemma shift_Edeflam_fill : 
+    (forall Et r m n EP, Et <=<[ Edeflam r (Ebag m n EP) ] = 
+                        (Et <=<[ Edeflam r (Ebag m n Ehol) ]) <=<[ EP ])
+/\  (forall EP r m n EP', EP <=<[ Edeflam r (Ebag m n EP') ]p = 
+                        (EP <=<[ Edeflam r (Ebag m n Ehol) ]p) <=<[ EP' ]p).
+Proof. apply EC_ind; simpl; intros; try rewrite H; auto. Qed.
+
+Lemma shift_Epar_fill : 
+    (forall Et P EP, Et <=<[ Epar EP P ] = 
+                    (Et <=<[ Epar Ehol P ]) <=<[ EP ])
+/\  (forall EP P EP', EP <=<[ Epar EP' P ]p = 
+                    (EP <=<[ Epar Ehol P ]p) <=<[ EP' ]p).
+Proof. apply EC_ind; simpl; intros; try rewrite H; auto. Qed.
+
+Lemma shift_Ehol_fill_term : forall Et, Et <=<[ Ehol ] = Et.
+Proof. apply shift_Ehol_fill. Qed.
+Lemma shift_Ehol_fill_proc : forall EP, EP <=<[ Ehol ]p = EP.
+Proof. apply shift_Ehol_fill. Qed.
+Lemma shift_Edeflam_fill_term : forall Et r m n EP, 
+  Et <=<[ Edeflam r (Ebag m n EP) ] = (Et <=<[ Edeflam r (Ebag m n Ehol) ]) <=<[ EP ].
+Proof. apply shift_Edeflam_fill. Qed.
+Lemma shift_Edeflam_fill_proc : forall EP r m n EP', 
+  EP <=<[ Edeflam r (Ebag m n EP') ]p = (EP <=<[ Edeflam r (Ebag m n Ehol) ]p) <=<[ EP' ]p.
+Proof. apply shift_Edeflam_fill. Qed.
+Lemma shift_Epar_fill_term : forall Et P EP, 
+  Et <=<[ Epar EP P ] = (Et <=<[ Epar Ehol P ]) <=<[ EP ].
+Proof. apply shift_Epar_fill. Qed.
+Lemma shift_Epar_fill_proc : forall EP P EP', 
+  EP <=<[ Epar EP' P ]p = (EP <=<[ Epar Ehol P ]p) <=<[ EP' ]p.
+Proof. apply shift_Epar_fill. Qed.
+
+Ltac shift_fill_left :=
+  repeat rewrite shift_Ehol_fill_term; repeat rewrite shift_Ehol_fill_proc;
+  try rewrite shift_Edeflam_fill_term; try rewrite shift_Edeflam_fill_proc;
+  try rewrite shift_Epar_fill_term; try rewrite shift_Epar_fill_proc.
+
 
 Ltac split_hole_scope_generalize EP :=
     let Et := fresh in
@@ -293,11 +330,13 @@ Proof.
 Qed.
 
 
-Lemma inv_split_hole_scope_builder_Ehol_eq :
-  forall (EP EP_acc : EC_proc) (Et_trav Et_top : EC_term),
-    split_hole_scope_builder EP EP_acc Et_trav = (Et_top, Ehol) ->
-    Et_top = Et_trav <=<[ EP_acc <=<[ EP ]p ].
-Proof.
+Lemma split_hole_scope_builder_Edeflam_acc :
+  forall EP r Et_acc Et_trav Et_top,
+    split_hole_scope_builder EP (Edeflam r Et_acc) Et_trav <> (Et_top, Ehol).
+Proof. 
+  EP_ind_unsafe IH EP; simpl; intros; auto.
+  discriminate.
+Qed.
 
 Lemma inv_split_hole_scope_Ehol_eq :
   forall (Et Et_top : EC_term),
@@ -307,17 +346,19 @@ Proof.
   intro Et; destruct Et as [m n EP0]; simpl.
   enough (forall (EP EP_acc : EC_proc) (Et_trav Et_top : EC_term),
             split_hole_scope_builder EP EP_acc Et_trav = (Et_top, Ehol) ->
-            Et_top = Et_trav <=<[ EP_acc <=<[ EP ]p ]). apply H.
-  EP_ind_unsafe IH EP; simpl; intros.
-  - destruct EP_acc; simpl; injection H; intros; subst.
-    + rewrite Ehol_fill_id. 
-  - simpl in H2.
-
-
-  all: unfold split_hole_scope; rewrite H; intros.
-  - injection H0; auto.
-  - apply inv_split_hole_scope_builder_Ehol_Epar in H0; destruct H0.
+            Et_top = Et_trav <=<[ EP_acc <=<[ EP ]p ]); try apply H.
+  EP_ind_unsafe IH EP; simpl; intros; shift_fill_left.
+  - destruct EP_acc; simpl.
+    all: injection H; intros; subst; repeat rewrite shift_Ehol_fill_proc; auto.
+    discriminate H0.
+  - now apply split_hole_scope_builder_Edeflam_acc in H2.
+  - apply IH; auto.
 Qed.
+
+
+
+
+TODO
 
 Lemma inv_split_hole_scope_Ehol_hs :
   forall (Et Et_top : EC_term),
