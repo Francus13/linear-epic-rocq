@@ -593,7 +593,7 @@ Lemma fill_wf_pres :
         wf_proc m n G D (EP <=[ P ]p)).
 Proof.
   apply wf_EC_ind; intros.
-  (* Ebag and Epar are by IH *)
+  (* Ebag and Epar by IH *)
     all: try solve [ econstructor; eauto ].
   (* Ehol just needs rewriting (it gives P when filled) *)
   - rewrite HG, HD; auto.
@@ -615,7 +615,7 @@ Lemma EC_fill_wf_pres :
         wf_EC_proc m n m_hol' n_hol' G D G_hol' D_hol' (EP <=<[ EP' ]p)).
 Proof.
   apply wf_EC_ind; intros.
-  (* Most cases are by IH *)
+  (* Most cases by IH *)
     all: try solve [ econstructor; eauto ].
   (* Ehol just needs rewriting (it gives P when filled) *)
     rewrite HG, HD; auto.
@@ -650,7 +650,8 @@ Ltac finish_by_IH_inv_prem H WF :=
       exists m_hol, n_hol, G_hol, D_hol; split; auto;
       econstructor; eauto.
 
-(* TODO *)
+(* If a filled term is well-formed,
+    then the filler and fillee are both well-formed *)
 Lemma inv_fill_wf :
   (forall Et P m n,
       wf_term m n (Et <=[ P ]) ->
@@ -665,15 +666,16 @@ Lemma inv_fill_wf :
       wf_proc m_hol n_hol G_hol D_hol P /\
       wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP).
 Proof.
+  (* Most cases by inversion and IH *)
   apply EC_ind; intros.
-    (* Ebag *)
+  (* Ebag *)
   - inversion H0; subst. finish_by_IH_inv_prem H WFP.
-    (* Ehol *)
+  (* Ehol immediate (filling hole gives P) *)
   - exists m, n, G, D. split; auto. econstructor; reflexivity.
-    (* Edeflam *)
+  (* Edeflam *)
   - inversion H0; inversion WFO; existT_eq; subst. finish_by_IH_inv_prem H WFT.
     rewrite HD, HD0, sum_zero_r; reflexivity.
-    (* Epar *)
+  (* Epar *)
   - inversion H0; existT_eq; subst. finish_by_IH_inv_prem H WFP1.
 Qed.
 
@@ -689,14 +691,15 @@ Lemma inv_EC_fill_wf :
       wf_EC_proc m_hol n_hol m_hol' n_hol' G_hol D_hol G_hol' D_hol' EP' /\
       wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP).
 Proof.
+  (* Most cases by inversion and IH *)
   apply EC_ind; intros.
-    (* Ebag *)
+  (* Ebag *)
   - inversion H0; existT_eq; subst. finish_by_IH_inv_prem H WFP.
-    (* Ehol *)
+  (* Ehol immediate (filling hole gives EP') *)
   - exists m, n, G, D. split; auto. econstructor; reflexivity.
-    (* Edeflam *)
+  (* Edeflam *)
   - inversion H0; inversion WFT; existT_eq; subst. finish_by_IH_inv_prem H WFT.
-    (* Epar *)
+  (* Epar *)
   - inversion H0; existT_eq; subst. finish_by_IH_inv_prem H WFP1.
 Qed.
 
@@ -719,15 +722,16 @@ Lemma max_rvar_hole_EC_wf :
         D_hol r <= 2))).
 Proof.
   apply wf_EC_ind; intros.
-  (* Ebag *)
+  (* Ebag by IH *)
   - destruct (H r); auto. destruct H1. apply H2. 
     unfold ctxt_app, flat_ctxt.
+    (* Case which context r is in *)
     destruct (lt_dec r n); auto. destruct (UD r); lia.
-  (* Ehol *)
+  (* Ehol immediate *)
   - rewrite <- HD; auto.
-  (* Elamdef *)
+  (* Elamdef immediate *)
   - auto.
-  (* Epar *)
+  (* Epar by IH *)
   - destruct (H r); auto. destruct H1; subst.
     right; split; auto; intros.
     rewrite HD in H1; auto. unfold sum in H1; lia.
@@ -738,7 +742,10 @@ Qed.
 (* Preservation Lemmas about EC Functions *)
 
 (* If an EC is wf, then splitting it at its hole scope gives
-    two wf ECs (the accumulated Et_top and the hole scope Et_hs) *)
+    two wf ECs (the accumulated Et_top and the hole scope Et_hs).
+  This case is when hole scope <> top scope,
+    but this property is trivial when hole scope = top scope
+    given inv_split_hole_scope_Ehol_eq. *)
 Lemma split_hole_scope_pres :
   forall Et m n m_hol n_hol G_hol D_hol,
     wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
@@ -749,6 +756,7 @@ Lemma split_hole_scope_pres :
     /\  wf_EC_term m_top 1 m_hol n_hol G_hol D_hol Et_hs.
 Proof.
   intro Et; destruct Et as [m0 n0 EP0]; simpl.
+  (* As above, the full term is given by EP filling EP_acc filling Et_trav *)
   enough (
       forall EP EP_acc Et_trav Et_top r Et_hs m n m_hol n_hol G_hol D_hol,
         wf_EC_term m n m_hol n_hol G_hol D_hol (Et_trav <=<[ EP_acc ] <=<[ EP ]) ->
@@ -759,14 +767,19 @@ Proof.
     ).
   1: intros; eapply H; eauto; simpl; auto.
   EP_ind_unsafe IH EP; simpl; intros.
-  - destruct EP_acc; try discriminate H0.
+  (* Ehol *)
+  - destruct EP_acc; try discriminate H0. (* hole scope = top scope is contra *)
     injection H0; intros; subst.
     rewrite shift_Ehol_fill_term in H.
+    (* Separate wf for Et_trav/Et_top and EP_acc,
+        from which it's straightforward to get wf for Et_hs. *)
     apply inv_EC_fill_wf in H. dest_conj_disj_exist.
     inversion H; existT_eq; subst.
     rewrite HG, HD in H1. eauto.
+  (* Edeflam by IH *)
   - rewrite shift_Edeflam_fill_term in H2.
     eapply IH; eauto.
+  (* Epar by IH with lots of rewriting *)
   - rewrite shift_Epar_fill_term in H.
     repeat rewrite commute_EC_fill_term in H.
     rewrite <- commute_EC_fill_proc, <- commute_EC_fill_term in H.
