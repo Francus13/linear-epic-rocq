@@ -42,64 +42,10 @@ Scheme EC_term_rec_m := Induction for EC_term Sort Set
 Combined Scheme EC_rec from EC_term_rec_m, EC_proc_rec_m.
 
 
-
-Fixpoint EP_size EP :=
-  match EP with
-  | Ehol => 0
-  | Edeflam _ (Ebag _ _ EP') => 1 + EP_size EP'
-  | Epar EP' _ => 1 + EP_size EP'
-  end.
-
-Definition EP_lt EP1 EP2 := lt (EP_size EP1) (EP_size EP2).
-
-Lemma EP_lt_wf : well_founded EP_lt.
-Proof.
-  unfold well_founded; intros. constructor; intros.
-  unfold EP_lt in H. induction a.
-  - inversion H.
-  - destruct Et. simpl in H.
-Admitted.
-
-(* Inductive EC_lt_strict : (EC_term + EC_proc) -> (EC_term + EC_proc) -> Prop :=
-| Ebag_lt : forall EP m n, 
-                EC_lt_strict (inr EP) (inl (Ebag m n EP))
-| Edeflam_lt : forall Et r, 
-                EC_lt_strict (inl Et) (inr (Edeflam r Et))
-| Epar_lt : forall EP P,
-                EC_lt_strict (inr EP) (inr (Epar EP P)).
-
-Definition EC_lt := clos_trans _ EC_lt_strict.
-
-Lemma EC_lt_wf_helper :
-    (forall Et, Acc EC_lt (inl Et))
-/\  (forall EP, Acc EC_lt (inr EP)).
-Proof.
-  apply EC_ind; intros; constructor; intros.
-  (* Ebag, Edeflam, and Epar are the same *)
-  - remember (inl (Ebag m n EP)) as x; induction H0; subst.
-    + inversion H0; auto.
-    + apply (Acc_inv (IHclos_trans2 eq_refl)). apply H0_.
-  (* Ehol is a base case *)
-  - exfalso. remember (inr (Ehol)) as x; induction H; subst.
-    + inversion H.
-    + auto.
-  - remember (inr (Edeflam r Et)) as x; induction H0; subst.
-    + inversion H0; auto.
-    + apply (Acc_inv (IHclos_trans2 eq_refl)). auto.
-  - remember (inr (Epar EP P)) as x; induction H0; subst.
-    + inversion H0; auto.
-    + apply (Acc_inv (IHclos_trans2 eq_refl)). auto.
-Qed.
-
-Lemma EC_lt_wf : well_founded EC_lt.
-Proof. unfold well_founded. intros; destruct a; apply EC_lt_wf_helper. Qed.
-Definition EC_lt_ind := well_founded_induction EC_lt_wf.
-
-
-Definition EP_lt EP1 := (EC_lt (inr EP1)) ∘ inr.
-Lemma EP_lt_wf : well_founded EP_lt.
-unfold well_founded, EP_lt. intros. constructor; intros.
-Admitted. *)
+(* Projects the EC_term components *)
+Definition get_fvars_Et Et := match Et with Ebag m _ _ => m end.
+Definition get_rvars_Et Et := match Et with Ebag _ n _ => n end.
+Definition get_proc_Et Et := match Et with Ebag _ _ EP => EP end.
 
 
 
@@ -140,16 +86,12 @@ with EC_fill_EC_proc (EP : EC_proc) (EP' : EC_proc) : EC_proc :=
 where "Et <=<[ EP ]" := (EC_fill_EC_term Et EP)
 and   "EP <=<[ EP' ]p" := (EC_fill_EC_proc EP EP').
 
-(* Projects the EC_term components *)
-Definition get_fvars_Et Et := match Et with Ebag m _ _ => m end.
-Definition get_rvars_Et Et := match Et with Ebag _ n _ => n end.
-Definition get_proc_Et Et := match Et with Ebag _ _ EP => EP end.
-
 
 
 (* Returns true if the hole is not underneath a lambda binding.
    Otherwise returns false. *)
-Fixpoint is_hole_scope_at_top Et := is_hole_scope_at_top_proc (get_proc_Et Et)
+Fixpoint is_hole_scope_at_top Et := 
+  is_hole_scope_at_top_proc (get_proc_Et Et)
 with is_hole_scope_at_top_proc EP := 
   match EP with
   | Ehol => true
@@ -159,39 +101,47 @@ with is_hole_scope_at_top_proc EP :=
 
 
 
-(* HELPER FUNCTION! for split_hole_scope.
- *)
+(* HELPER FUNCTION! for split_hole_scope below.
+  EP is the EC being traversed
+  EP_acc accumulates the current scope as EP is traversed
+  Et_trav accumulates EP_acc when EP traverses into a new scope
+      (i.e. when an Edeflam is reached), upon which EP_acc resets  *)
 Fixpoint split_hole_scope_builder (EP EP_acc : EC_proc) 
                                   (Et_trav : EC_term) : EC_term * EC_proc :=
   match EP with
-  | Ehol => match EP_acc with
-            | Edeflam _ _ => (Et_trav, EP_acc)
-            | _           => (Et_trav <=<[ EP_acc ], Ehol)
+  | Ehol => match EP_acc with  (* Case on if hole scope = top scope*)
+            | Edeflam _ _ => (Et_trav, EP_acc)  (* hole scope <> top scope *)
+            | _           => (Et_trav <=<[ EP_acc ], Ehol)  (* hole scope = top scope *)
             end
   | Edeflam r (Ebag m n EP') => split_hole_scope_builder EP' 
-                                  (Edeflam r (Ebag m n Ehol)) 
-                                  (Et_trav <=<[ EP_acc ])
+                                  (Edeflam r (Ebag m n Ehol))  (* Start accumulating new scope *)
+                                  (Et_trav <=<[ EP_acc ])  (* Pass old scope to Et_trav *)
   | Epar EP' P => split_hole_scope_builder EP' 
                     (EP_acc <=<[ Epar Ehol P ]p) Et_trav
   end.
 
 
-(* Applies pop_EC_scope until the "hole scope" is reached,
-      separating the hole scope from the rest of the EC.
-   Given an EC, returns a pair whose 
-      first element is the EC with the hole scope replaced by a hole
-      and second element is the hole scope.
-   The invariants of pop_EC_scope are also held by split_hole_scope. *)
+(* Given an Et, returns a pair whose 
+      first element is the EC with the hole scope replaced by a hole and
+      second element is the hole scope,
+    UNLESS the hole scope of Et is the top scope, 
+      in which case the first element is just Et
+      and the second element is Ehol
+      (because there was no deeper hole scope to split).
+  This function is used in the semantics to
+    get the scope of where the reductions occur
+    (which is the hole scope of the EC being filled)  *)
 Definition split_hole_scope (Et : EC_term) : EC_term * EC_proc :=
   match Et with
   | Ebag m n EP => split_hole_scope_builder EP Ehol (Ebag m n Ehol)
   end.
 
 
+(* Projects the hole scope from split_hole_scope *)
 Definition hole_scope Et := 
   match split_hole_scope Et with 
   | (_, Edeflam _ Et_lam) => Et_lam
-  | _ => Et   (* Only reachable when hole is at top scope *)
+  | _ => Et
   end.
 
 
@@ -251,6 +201,7 @@ with rename_fvar_EC_term {m m'} (v : ren m m') (Et : EC_term) :=
 
 (* Lemmas for EC functions *)
 
+(* Filling twice is the same as first filling the filler *)
 Lemma commute_fill :
     (forall Et EP P,  Et <=<[ EP ] <=[ P ] = 
                       Et <=[ EP <=[ P ]p ])
@@ -280,6 +231,8 @@ Proof. apply commute_EC_fill. Qed.
 
 
 
+(* Pops the head construct from a filler,
+    allowing it to fill independently *)
 Lemma shift_Ehol_fill : 
     (forall Et, Et <=<[ Ehol ] = Et)
 /\  (forall EP, EP <=<[ Ehol ]p = EP).
@@ -323,6 +276,8 @@ Ltac shift_fill_left :=
 
 
 
+(* Given whether hole scope = top scope for a filling and fillee,
+    gives whether hole scope = top scope for the fill result *)
 Lemma meet_hole_scope_at_top :
     (forall Et EP, is_hole_scope_at_top Et = true ->
                     is_hole_scope_at_top_proc EP = true ->
@@ -365,28 +320,47 @@ Proof. intros; apply join_hole_scope_at_top. auto. Qed.
 
 
 
-Ltac split_hole_scope_generalize EP :=
-    let Et := fresh in
-  intro Et; destruct Et as [m n EP]; simpl;
-  generalize (Ebag m n Ehol) as Et_trav; generalize Ehol as EP_acc;
-  generalize dependent EP.
-
+(* Induction technique for inducting on the 
+    traversed EP in split_hole_scope_builder.
+  This is needed because split_hole_scope_builder
+    doesn't always decrease the input by one construct
+    (in Edeflam, the inner Ebag is also traversed).
+  Unsafe because it does not force that you give
+    a substructure of the inducted EP,
+    but Qed will fail if you give anything that's not a substructure
+    (use "Guarded." to check anytime that you've only given substructures).  *)
 Ltac EP_ind_unsafe IH EP :=
   match goal with [|- forall x, @?P x] => refine (fix IH EP: _ := _) end;
     let r := fresh in let n := fresh in let m := fresh in let P := fresh in
   destruct EP as [ | r [ m n EP ] | EP P ].
 
 
+
+(* NOTE: The lemmas concerning split_hole_scope
+    start by destructing its argument and
+    giving a new lemma that is essentially the same
+    but concerning split_hole_scope_builder
+    (and so may require some more machinery).  *)
+
+(* split_hole_scope can only return Ehol or Edeflam as second element *)
 Lemma inv_split_hole_scope :
-      (forall (Et : EC_term),
-          (exists Et_top,
-            split_hole_scope Et = (Et_top, Ehol))
-      \/  (exists Et_top r Et_rest,
-            split_hole_scope Et = (Et_top, Edeflam r Et_rest))).
+  (forall (Et : EC_term),
+    (exists Et_top,
+      split_hole_scope Et = (Et_top, Ehol))
+\/  (exists Et_top r Et_rest,
+      split_hole_scope Et = (Et_top, Edeflam r Et_rest))).
 Proof.
-  remember Ehol as x; split_hole_scope_generalize EP; subst.
-  EP_ind_unsafe IH EP; simpl; intros; auto.
-  destruct EP_acc; eauto.
+  intro Et; destruct Et as [m n EP0]; simpl.
+  enough (forall (EP EP_acc : EC_proc) (Et_trav : EC_term),
+      (exists Et_top : EC_term, 
+        split_hole_scope_builder EP EP_acc Et_trav = (Et_top, Ehol))
+   \/ (exists (Et_top : EC_term) (r : rvar) (Et_rest : EC_term),
+        split_hole_scope_builder EP EP_acc Et_trav = (Et_top, Edeflam r Et_rest)));
+      try apply H.
+  (* Edeflam and Epar immediate after IH *)
+    EP_ind_unsafe IH EP; simpl; intros; auto.
+  (* Ehol cases on if hole scope = top scope, both cases being trivial *)
+    destruct EP_acc; eauto.
 Qed.
 
 Lemma inv_split_hole_scope_Epar :
@@ -399,32 +373,46 @@ Proof.
 Qed.
 
 
+
+(* If EP_acc is a deflam, this indicates that hole scope <> top scope *)
 Lemma split_hole_scope_builder_Edeflam_acc :
   forall EP r Et_acc Et_trav Et_top,
     split_hole_scope_builder EP (Edeflam r Et_acc) Et_trav <> (Et_top, Ehol).
 Proof. 
+  (* All cases are immediate after IH *)
   EP_ind_unsafe IH EP; simpl; intros; auto.
   discriminate.
 Qed.
 
+
+(* If hole scope = top scope then split_hole_scope
+    returns its input as the first element. *)
 Lemma inv_split_hole_scope_Ehol_eq :
   forall (Et Et_top : EC_term),
     split_hole_scope Et = (Et_top, Ehol) ->
     Et_top = Et.
 Proof.
   intro Et; destruct Et as [m n EP0]; simpl.
-  enough (forall (EP EP_acc : EC_proc) (Et_trav Et_top : EC_term),
+  (* The new lemma treats the "whole input" as EP filling EP_acc filling Et_trav
+      since Et_trav accumulates scopes and EP_acc accumulates current scope from EP *)
+    enough (forall (EP EP_acc : EC_proc) (Et_trav Et_top : EC_term),
             split_hole_scope_builder EP EP_acc Et_trav = (Et_top, Ehol) ->
             Et_top = Et_trav <=<[ EP_acc <=<[ EP ]p ]); try apply H.
-  EP_ind_unsafe IH EP; simpl; intros; shift_fill_left.
+  (* All cases pop the head off EP with shift_fill_left *)
+    EP_ind_unsafe IH EP; simpl; intros; shift_fill_left.
+  (* Ehol cases on if hole scope = top scope *)
   - destruct EP_acc; simpl.
     all: injection H; intros; subst; repeat rewrite shift_Ehol_fill_proc; auto.
     discriminate H0.
+  (* Edeflam is a contradiction *)
   - now apply split_hole_scope_builder_Edeflam_acc in H2.
+  (* Epar is by IH *)
   - apply IH; auto.
 Qed.
 
 
+(* Asserts that hole scope = top scope
+    if split_hole_scope returns Ehol as second element *)
 Lemma inv_split_hole_scope_Ehol_hs :
   forall (Et Et_top : EC_term),
     split_hole_scope Et = (Et_top, Ehol) ->
@@ -435,24 +423,38 @@ Proof.
             split_hole_scope_builder EP EP_acc Et_trav = (Et_top, Ehol) ->
             is_hole_scope_at_top_proc EP = true); try apply H.
   EP_ind_unsafe IH EP; simpl; intros.
+  (* Ehol gives hole scope = top scope *)
   - reflexivity.
+  (* Edeflam is a contradiction *)
   - now apply split_hole_scope_builder_Edeflam_acc in H2.
+  (* Epar is by IH *)
   - eapply IH; apply H.
 Qed.
 
+
+(* Asserts that hole scope <> top scope
+    if split_hole_scope returns Edeflam as second element *)
 Lemma inv_split_hole_scope_Edeflam :
   forall (Et Et_top : EC_term) r Et_rest,
     split_hole_scope Et = (Et_top, Edeflam r Et_rest) ->
     is_hole_scope_at_top Et = false.
 Proof.
   intro Et; destruct Et as [m n EP0]; simpl.
+  (* An additional hypothesis is made that EP_acc's hole scope = top scope
+      to remember that we are traversing the top scope
+    (once we reach an Edeflam, we can prove hole scope <> top scope
+      without ever needing to go under). *)
   enough (forall (EP EP_acc : EC_proc) (Et_trav Et_top : EC_term) r Et_rest,
             split_hole_scope_builder EP EP_acc Et_trav = (Et_top, Edeflam r Et_rest) ->
             is_hole_scope_at_top_proc EP_acc = true ->
             is_hole_scope_at_top_proc EP = false); try (intros; eapply H; eauto).
   EP_ind_unsafe IH EP; simpl; intros.
+  (* Ehol is a contradiction *)
   - destruct EP_acc; try discriminate H. discriminate H0.
+  (* Edeflam gives hole scope <> top scope *)
   - reflexivity.
+  (* Epar is by IH, but also needs to show 
+      the new accumulator still has its hole scope = top scope *)
   - eapply IH; try apply H. 
     apply meet_hole_scope_at_top_proc; auto.
 Qed.
@@ -548,9 +550,13 @@ Lemma EC_equiv_wf :
       wf_EC_proc m n m_hol n_hol G2 D2 G2_hol D2_hol EP).
 Proof.
   apply wf_EC_ind; intros.
+  (* Ebag *)
   - econstructor; eauto. apply H; auto; reflexivity.
+  (* Ehol *)
   - econstructor; do 2 (eapply transitivity; eauto); symmetry; auto.
+  (* Edeflam *)
   - econstructor; auto; eapply transitivity; eauto; symmetry; auto.
+  (* Epar *)
   - econstructor; eauto.
     2, 3: eapply transitivity; eauto; symmetry; auto.
     apply H; auto; reflexivity.
@@ -587,14 +593,13 @@ Lemma fill_wf_pres :
         wf_proc m n G D (EP <=[ P ]p)).
 Proof.
   apply wf_EC_ind; intros.
-    (* Most cases are immediate or by IH *)
-  all: try solve [
-    try econstructor; try apply WFP2; try rewrite HG, HD; auto
-  ].
-    (* Edeflam *)
-  - simpl. apply wf_def with (D' := zero n); auto.
-    + rewrite sum_zero_r. auto.
-    + apply wf_lam; auto. reflexivity.
+  (* Ebag and Epar are by IH *)
+    all: try solve [ econstructor; eauto ].
+  (* Ehol just needs rewriting (it gives P when filled) *)
+  - rewrite HG, HD; auto.
+  (* Edeflam builds two layers (using IH) *)
+  - simpl. apply wf_def with (D' := zero n); try rewrite sum_zero_r; auto.
+    constructor; auto; reflexivity.
 Qed.
 
 Lemma EC_fill_wf_pres :
@@ -610,9 +615,10 @@ Lemma EC_fill_wf_pres :
         wf_EC_proc m n m_hol' n_hol' G D G_hol' D_hol' (EP <=<[ EP' ]p)).
 Proof.
   apply wf_EC_ind; intros.
-    (* All cases are immediate or by IH *)
-  all: try econstructor; try apply WFP2; simpl; 
-        try rewrite HG, HD; simpl; auto.
+  (* Most cases are by IH *)
+    all: try solve [ econstructor; eauto ].
+  (* Ehol just needs rewriting (it gives P when filled) *)
+    rewrite HG, HD; auto.
 Qed.
 
 Lemma fill_wf_pres_term : forall m n m_hol n_hol G_hol D_hol Et,
@@ -636,12 +642,15 @@ Proof. apply EC_fill_wf_pres. Qed.
 
 
 
+(* Useful tactic for the following two lemmas.
+    Finishes a goal by using terms given by applying the IH. *)
 Ltac finish_by_IH_inv_prem H WF := 
       apply H in WF;
       destruct WF as (m_hol & n_hol & G_hol & D_hol & WF1 & WF2);
       exists m_hol, n_hol, G_hol, D_hol; split; auto;
       econstructor; eauto.
 
+(* TODO *)
 Lemma inv_fill_wf :
   (forall Et P m n,
       wf_term m n (Et <=[ P ]) ->
