@@ -264,7 +264,7 @@ Definition cut_renaming n (r1 r2 r1' r2':nat) : ren n n :=
 Definition scoped_rvars_at_hole : EC_term -> nat := 
   case_hole_scope_at_top 
     (get_rvars_Et) 
-    ((add 1) ∘ get_rvars_Et).
+    (fun Et => 1 + (get_rvars_Et Et)).
 
 Definition tuple_cut_hole_scope Et r1 r2 r1' r2' := 
   let ren := cut_renaming (scoped_rvars_at_hole Et) r1 r2 r1' r2' in
@@ -530,6 +530,8 @@ Proof.
   - right; split; auto. exists D_hol'; repeat split; auto.
     + transitivity D_hol; auto.
     + constructor; auto; reflexivity.
+  (* Elamdef *)
+  - left. constructor; auto. eapply H; eauto.
   (* Epar *)
   - destruct (H r D_hol'); auto.
     + left. econstructor; eauto.
@@ -538,8 +540,6 @@ Proof.
       * rewrite <- sum_assoc, (sum_commutative D2), sum_assoc. 
         rewrite HD; rewrite H4. reflexivity.
       * econstructor; eauto; reflexivity.
-  (* Elamdef *)
-  - left. constructor; auto. eapply H; eauto.
 Qed.
 
 
@@ -561,11 +561,26 @@ Proof.
   destruct (inv_split_hole_scope (Ebag m0 n0 EP)); dest_conj_disj_exist.
   all: rewrite H4.
   - apply inv_split_hole_scope_Ehol_hs in H4. rewrite H4. simpl.
-    admit.
-  - assert (H5 := H4). 
+    econstructor; eauto.
+    admit. (* Need the cut renaming to preserve wf *)
+  - assert (H5 := H4); assert (H6 := H4). 
+    (* Get hole scope <> top scope *)
     apply inv_split_hole_scope_Edeflam in H4. rewrite H4.
-    destruct x1. unfold compose. simpl.
-    admit. (* Need to create lemmas for plugging back in *)
+    destruct x1. simpl.
+    (* Get x wf and EP0 wf *)
+    eapply split_hole_scope_pres in H5; 
+    try solve [econstructor; eauto]; dest_conj_disj_exist.
+    inversion H7; existT_eq; subst.
+    (* Just need filler wf and fillee wf *)
+    eapply EC_fill_wf_pres_term; eauto.
+    constructor; auto; try reflexivity.
+    econstructor; eauto.
+    (* Need to know n_hol = n1 + 1 *)
+    apply split_hole_scope_gives_hole_scope in H6.
+    assert (n_hol = n1 + 1). {
+      eapply hole_scope_at_top_wf_simpl; eauto.
+    } subst.
+    admit. (* Need the cut renaming to preserve wf *)
 Qed.
 
 

@@ -147,8 +147,8 @@ Definition hole_scope Et :=
 
 
 (* Applies a funciton f at the hole scope, returning the result *)
-Definition apply_at_hole_scope {X} (f : EC_term -> X) := 
-  f ∘ hole_scope.
+Definition apply_at_hole_scope {X} (f : EC_term -> X) Et := 
+  f (hole_scope Et).
 
 (* Applies either f1 or f2 to the hole scope, depending on whether 
    the hole scope is the top scope *)
@@ -412,7 +412,7 @@ Qed.
 
 
 (* Asserts that hole scope = top scope
-    if split_hole_scope returns Ehol as second element *)
+    if split_hole_scope returns Ehol as second element. *)
 Lemma inv_split_hole_scope_Ehol_hs :
   forall (Et Et_top : EC_term),
     split_hole_scope Et = (Et_top, Ehol) ->
@@ -433,7 +433,7 @@ Qed.
 
 
 (* Asserts that hole scope <> top scope
-    if split_hole_scope returns Edeflam as second element *)
+    if split_hole_scope returns Edeflam as second element. *)
 Lemma inv_split_hole_scope_Edeflam :
   forall (Et Et_top : EC_term) r Et_rest,
     split_hole_scope Et = (Et_top, Edeflam r Et_rest) ->
@@ -458,6 +458,47 @@ Proof.
   - eapply IH; try apply H. 
     apply meet_hole_scope_at_top_proc; auto.
 Qed.
+
+
+(* Asserts that the second returned element of
+    split_hole_scope is a hole scope. *)
+Lemma split_hole_scope_gives_hole_scope :
+  forall (Et Et_top : EC_term) r Et_rest,
+    split_hole_scope Et = (Et_top, Edeflam r Et_rest) ->
+    is_hole_scope_at_top Et_rest = true.
+Proof.
+  intro Et; destruct Et as [m n EP0]; simpl.
+  (* The extra hypothesis tracks that EP_acc only builds one scope at a time *)
+  enough (forall (EP EP_acc : EC_proc) (Et_trav Et_top : EC_term) r Et_rest,
+            split_hole_scope_builder EP EP_acc Et_trav = (Et_top, Edeflam r Et_rest) ->
+            (forall r' Et_acc, EP_acc = Edeflam r' Et_acc -> 
+                is_hole_scope_at_top Et_acc = true) ->
+            is_hole_scope_at_top Et_rest = true).
+  1: intros; eapply H; eauto; discriminate.
+  EP_ind_unsafe IH EP; simpl; intros.
+  (* Ehol uses that EP_acc wraps the hole scope *)
+  - destruct EP_acc; try discriminate H.
+    injection H; intros; subst. eauto.
+  (* Edeflam is by IH (the extra hypothesis in the IH is immediate) *)
+  - eapply IH; eauto.
+    intros. injection H4; intros; subst. auto.
+  (* Epar is by IH, but also needs to show 
+      the new accumulator still has its hole scope = top scope *)
+  - eapply IH; eauto. intros.
+    (* Need to get that EP_acc = Edeflam r' Et *) 
+    destruct EP_acc; try discriminate H1.
+    injection H1; intros; subst.
+    apply meet_hole_scope_at_top_term; eauto.
+Qed.
+
+
+
+
+
+
+
+
+
 
 
 
@@ -739,13 +780,35 @@ Qed.
 
 
 
-(* Preservation Lemmas about EC Functions *)
+(* If a wf EC has hole scope = top scope,
+    then bounds of top scope and current scope are the same. *)
+Lemma hole_scope_at_top_wf_simpl :
+    (forall m n m_hol n_hol G_hol D_hol Et,
+      wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
+      is_hole_scope_at_top Et = true ->
+      m_hol = (get_fvars_Et Et) + m  /\
+      n_hol = (get_rvars_Et Et) + n)
+/\  (forall m n m_hol n_hol G D G_hol D_hol EP,
+      wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP ->
+      is_hole_scope_at_top_proc EP = true ->
+      m_hol = m  /\
+      n_hol = n).
+Proof.
+  apply wf_EC_ind; simpl; intros.
+  (* Most cases are immediate *)
+  all: auto.
+  (* Edeflam is a contradiction *)
+  discriminate H0.
+Qed.
+
+
 
 (* If an EC is wf, then splitting it at its hole scope gives
     two wf ECs (the accumulated Et_top and the hole scope Et_hs).
   This case is when hole scope <> top scope,
     but this property is trivial when hole scope = top scope
-    given inv_split_hole_scope_Ehol_eq. *)
+    given inv_split_hole_scope_Ehol_eq. 
+  We keep r < n_top so that the Edeflam can be reconstructed if desired. *)
 Lemma split_hole_scope_pres :
   forall Et m n m_hol n_hol G_hol D_hol,
     wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
@@ -753,7 +816,8 @@ Lemma split_hole_scope_pres :
     split_hole_scope Et = (Et_top, Edeflam r Et_hs) ->
     exists m_top n_top,
         wf_EC_term m n m_top n_top (zero m_top) (one n_top r) Et_top
-    /\  wf_EC_term m_top 1 m_hol n_hol G_hol D_hol Et_hs.
+    /\  wf_EC_term m_top 1 m_hol n_hol G_hol D_hol Et_hs
+    /\  r < n_top.
 Proof.
   intro Et; destruct Et as [m0 n0 EP0]; simpl.
   (* As above, the full term is given by EP filling EP_acc filling Et_trav *)
@@ -764,6 +828,7 @@ Proof.
         exists m_top n_top,
             wf_EC_term m n m_top n_top (zero m_top) (one n_top r) Et_top
         /\  wf_EC_term m_top 1 m_hol n_hol G_hol D_hol Et_hs
+        /\  r < n_top
     ).
   1: intros; eapply H; eauto; simpl; auto.
   EP_ind_unsafe IH EP; simpl; intros.
