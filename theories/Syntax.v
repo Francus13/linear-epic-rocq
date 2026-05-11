@@ -842,14 +842,9 @@ Proof. apply tpo_wf_ws. Qed.
    of the (free) identifiers in a term.
 *)
 
-(* z{y/x} *)
-Definition rename_var (x:var) (y:var) (z:var) :=
-  if Nat.eq_dec z x then y else z.
-
 (* Linear resource variables are only locally scoped within the bag
    of a term, so operations that rename them don't need to traverse
-   nested subterms.
- *)
+   nested subterms. *)
     
 Definition rename_rvar_oper {n n'} (v : ren n n') (o:oper) :=
   match o with
@@ -1054,15 +1049,85 @@ Proof. intros; eapply rename_fvar_id_tpo; eauto. Qed.
 
 
 
+(* Renaming preserves well-formedness *)
+
+(* TODO Rework for just wf_ren, need to update the context *)
+Lemma rename_rvar_pres_wf :
+    (forall m n t,
+      wf_term m n t ->
+      True)
+/\  (forall m n G D P,
+      wf_proc m n G D P ->
+      forall (R : ren n n) (HWB : wf_bij_ren R),
+        wf_proc m n G (ren_compose (bij_inv R HWB) D) (rename_rvar_proc R P))
+/\  (forall m n G D o,
+      wf_oper m n G D o ->
+      forall (R : ren n n) (HWB : wf_bij_ren R),
+        wf_oper m n G (ren_compose (bij_inv R HWB) D) (rename_rvar_oper R o)).
+Proof.
+  apply wf_tpo_ind; simpl; intros.
+  (* All cases by IH and context rewriting *)
+  all: try unfold_wf_bij_ren HWB.
+  all: econstructor; eauto; try now apply x.
+  all: apply (ren_compose_ctxt_eq (bij_inv R HWB)) in HD; auto using bij_inv_wf.
+  all: try rewrite ren_sum_compose in HD.
+  all: repeat (erewrite ren_one_compose in HD; auto).
+  all: repeat rewrite bij_inv_bij_inv_eq in HD.
+  all: apply HD.
+  Unshelve. apply bij_inv_wf_bij.
+  Unshelve. apply bij_inv_wf_bij.
+  Unshelve. apply bij_inv_wf_bij.
+  Unshelve. apply bij_inv_wf_bij.
+Qed.
+
+Lemma rename_fvar_pres_wf :
+    (forall m n t,
+      wf_term m n t ->
+      forall (R : ren m m) (HWB : wf_bij_ren R),
+        wf_term m n (rename_fvar_term R t))
+/\  (forall m n G D P,
+      wf_proc m n G D P ->
+      forall (R : ren m m) (HWB : wf_bij_ren R),
+        wf_proc m n (ren_compose (bij_inv R HWB) G) D (rename_fvar_proc R P))
+/\  (forall m n G D o,
+      wf_oper m n G D o ->
+      forall (R : ren m m) (HWB : wf_bij_ren R),
+        wf_oper m n (ren_compose (bij_inv R HWB) G) D (rename_fvar_oper R o)).
+Proof.
+  apply wf_tpo_ind; simpl; intros.
+  (* Most cases by IH and context rewriting *)
+  all: try unfold_wf_bij_ren HWB.
+  all: econstructor; eauto; try now apply x.
+  all: try apply (ren_compose_ctxt_eq (bij_inv R HWB)) in HG; auto using bij_inv_wf.
+  all: try rewrite ren_sum_compose in HG.
+  all: repeat (erewrite ren_one_compose in HG; auto).
+  all: repeat rewrite bij_inv_bij_inv_eq in HG.
+  all: try apply HG.
+  Unshelve. 2: apply bij_inv_wf_bij.
+  (* Bag needs specific context rewritings 
+      because it extends the context *)
+  rewrite ren_shift_bij_app.
+  assert (wf_bij_ren (bij_app (ren_id m) R)) as HWB' by
+      (apply wf_bij_ren_app; auto using wf_bij_ren_id).
+  specialize H with 
+      (bij_app (ren_id m) R) 
+      (wf_bij_ren_app (ren_id m) R wf_bij_ren_id HWB).
+  rewrite bij_inv_app in H.
+  rewrite bij_inv_id in H.
+  rewrite <- ren_compose_app in H;
+      auto using wf_bij_ren_id, bij_inv_wf_bij.
+  rewrite ren_compose_id_l in H.
+  rewrite ren_compose_zero in H.
+  exact H.
+Qed.
+
+
+
 (* TODO? alpha-equivalence 
 
 t1 seq t1' peq t2 => t1 aeq t2 
 
-symmetry, reflexivity, transitivity of aeq
-
--> strong confluence t steps t1, t steps t2
-exists t1' t2' st t1' aeq t2' and t1 steps t1' and t2 steps t2'
-*)
+symmetry, reflexivity, transitivity of aeq *)
 
 
 
@@ -1246,7 +1311,7 @@ Proof.
           assert (y = ((bij_inv r WB) (r y))) as ?HI';
             try solve [apply bij_ren_inv_elt; auto];
           rewrite HI at 2; rewrite HI' at 2
-      (* 1 variables for 1 renaming (def) *)
+      (* 1 variable for 1 renaming (def) *)
       | [ _: ?x < ?n, r: ren ?n ?n, WB: wf_bij_ren ?r |- _ ] => 
           assert (x = ((bij_inv r WB) (r x))) as ?HI;
             try solve [apply bij_ren_inv_elt; auto];

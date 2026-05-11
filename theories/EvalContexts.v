@@ -852,3 +852,71 @@ Proof.
 Qed.
 
 
+
+(* EC Renaming preserves well-formedness *)
+Lemma rename_rvar_pres_wf_EC_hs :
+  forall EP m n G D G_hol D_hol,
+    wf_EC_proc m n m n G D G_hol D_hol EP ->
+    is_hole_scope_at_top_proc EP = true ->
+    forall (R : ren n n) (HWB : wf_bij_ren R),
+      wf_EC_proc m n m n G (ren_compose (bij_inv R HWB) D) 
+          G_hol (ren_compose (bij_inv R HWB) D_hol) (rename_rvar_EC_proc R EP).
+Proof.
+  induction EP; simpl; intros.
+  (* Ehol by context rewriting *)
+  - inversion H; existT_eq; subst.
+    econstructor; eauto.
+    rewrite ren_compose_ctxt_eq; eauto using bij_inv_wf. reflexivity.
+  (* Edeflam is contradiction *)
+  - discriminate.
+  (* Epar is by IH, context rewriting,
+      and process renaming preservation *)
+  - inversion H; existT_eq; subst.
+    econstructor; eauto.
+    + apply rename_rvar_pres_wf; eauto.
+    + rewrite ren_compose_ctxt_eq; eauto using bij_inv_wf.
+      rewrite ren_sum_compose. reflexivity.
+Qed.
+
+(* Lemma rename_fvar_pres_wf :
+    (forall m n t,
+      wf_term m n t ->
+      forall (R : ren m m) (HWB : wf_bij_ren R),
+        wf_term m n (rename_fvar_term R t))
+/\  (forall m n G D P,
+      wf_proc m n G D P ->
+      forall (R : ren m m) (HWB : wf_bij_ren R),
+        wf_proc m n (ren_compose (bij_inv R HWB) G) D (rename_fvar_proc R P))
+/\  (forall m n G D o,
+      wf_oper m n G D o ->
+      forall (R : ren m m) (HWB : wf_bij_ren R),
+        wf_oper m n (ren_compose (bij_inv R HWB) G) D (rename_fvar_oper R o)).
+Proof.
+  apply wf_tpo_ind; simpl; intros.
+  all: try unfold_wf_bij_ren HWB.
+  all: econstructor; eauto; try now apply x.
+  all: try apply (ren_compose_ctxt_eq (bij_inv R HWB)) in HG; auto using bij_inv_wf.
+  all: try rewrite ren_sum_compose in HG.
+  all: repeat (erewrite ren_one_compose in HG; auto).
+  all: repeat rewrite bij_inv_bij_inv_eq in HG.
+  all: try apply HG.
+  Unshelve. 2: apply bij_inv_wf_bij.
+  (* Bag is special because it extends the context *)
+  rewrite ren_shift_bij_app.
+  assert (wf_bij_ren (bij_app (ren_id m) R)) as HWB' by
+      (apply wf_bij_ren_app; auto using wf_bij_ren_id).
+  specialize H with 
+      (bij_app (ren_id m) R) 
+      (wf_bij_ren_app (ren_id m) R wf_bij_ren_id HWB).
+  rewrite bij_inv_app in H.
+  rewrite bij_inv_id in H.
+  rewrite <- ren_compose_app in H;
+      auto using wf_bij_ren_id, bij_inv_wf_bij.
+  rewrite ren_compose_id_l in H.
+  rewrite ren_compose_zero in H.
+  exact H.
+Qed. *)
+
+
+
+

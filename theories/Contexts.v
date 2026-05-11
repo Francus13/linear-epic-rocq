@@ -690,6 +690,18 @@ Qed.
   Lemma flat_ctxt_ren_compose_identity : forall {n m} x (r : ren n m),
       (ren_compose r (flat_ctxt x m)) = (flat_ctxt x m).
   Proof. auto using functional_extensionality. Qed.
+
+Lemma ren_compose_ctxt_eq : 
+  forall {n X} (r : ren n n) (c1 c2 : ctxt n X),
+    wf_ren r ->
+    c1 ≡[n] c2 ->
+    ren_compose r c1 ≡[n] ren_compose r c2.
+Proof.
+  unfold ren_compose, compose, ctxt_eq, wf_ren; intros.
+  apply H0. now apply H.
+Qed.
+
+
   
   (* bijections *)
 
@@ -772,6 +784,16 @@ Qed.
     repeat match goal with
     | [ H: context[wf_bij_ren ?R] |- _ ] => destruct H
     end.
+    
+Ltac unfold_wf_bij_ren WBH :=
+  let H0 := fresh in assert (H0 := WBH); destruct H0;
+  repeat match goal with
+    | [ H : wf_ren ?R |- _ ] => unfold wf_ren in H
+    | [ H : ren_inverses ?R1 ?R2 |- _ ] => unfold ren_inverses in H
+    | [ H : bij_ren ?R |- _ ] => 
+          let a := fresh in let b := fresh in let c := fresh in
+            destruct H as [a [b c]]
+  end.
 
   Lemma wf_ren_id : forall {n}, wf_ren (ren_id n).
   Proof. 
@@ -890,6 +912,10 @@ Qed.
     - destruct (lt_dec x (n + m)); try lia.
     - destruct (lt_dec x (n + m)); destruct (lt_dec (x - n) m); try lia.
   Qed.
+
+Lemma ren_shift_bij_app : forall {n} k (r : ren n n),
+  ren_shift k r = bij_app (ren_id k) r.
+Proof. auto. Qed.
   
 
   Definition bij_inv {n} (r : ren n n) (H : bij_ren r) : ren n n :=
@@ -1184,8 +1210,12 @@ Qed.
   Qed.
 
   Lemma ren_compose_flat_ctxt : forall {n m} x (r : ren n m),
-    (ren_compose r (flat_ctxt x m)) = (flat_ctxt x m).
+    (ren_compose r (flat_ctxt x m)) = (flat_ctxt x n).
   Proof. auto. Qed.
+Lemma ren_compose_zero : forall {n m} (r : ren n m),
+    (ren_compose r (zero m)) = (zero n).
+  Proof. auto. Qed.
+
   
   Lemma ren_one_compose :
     forall {n} (r : ren n n) (HWB : wf_bij_ren r) x,
