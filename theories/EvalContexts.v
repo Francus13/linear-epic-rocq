@@ -474,7 +474,7 @@ Proof.
             (forall r' Et_acc, EP_acc = Edeflam r' Et_acc -> 
                 is_hole_scope_at_top Et_acc = true) ->
             is_hole_scope_at_top Et_rest = true).
-  1: intros; eapply H; eauto; discriminate.
+  { intros; eapply H; eauto; discriminate. }
   EP_ind_unsafe IH EP; simpl; intros.
   (* Ehol uses that EP_acc wraps the hole scope *)
   - destruct EP_acc; try discriminate H.
@@ -830,7 +830,7 @@ Proof.
         /\  wf_EC_term m_top 1 m_hol n_hol G_hol D_hol Et_hs
         /\  r < n_top
     ).
-  1: intros; eapply H; eauto; simpl; auto.
+  { intros; eapply H; eauto; simpl; auto. }
   EP_ind_unsafe IH EP; simpl; intros.
   (* Ehol *)
   - destruct EP_acc; try discriminate H0. (* hole scope = top scope is contra *)

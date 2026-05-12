@@ -1058,17 +1058,20 @@ Lemma rename_rvar_pres_wf :
       True)
 /\  (forall m n G D P,
       wf_proc m n G D P ->
-      forall (R : ren n n) (HWB : wf_bij_ren R),
-        wf_proc m n G (ren_compose (bij_inv R HWB) D) (rename_rvar_proc R P))
+      forall (R : ren n n) (HWF : wf_ren R),
+        wf_proc m n G (lctxt_rename R D) (rename_rvar_proc R P))
 /\  (forall m n G D o,
       wf_oper m n G D o ->
-      forall (R : ren n n) (HWB : wf_bij_ren R),
-        wf_oper m n G (ren_compose (bij_inv R HWB) D) (rename_rvar_oper R o)).
+      forall (R : ren n n) (HWF : wf_ren R),
+        wf_oper m n G (lctxt_rename R D) (rename_rvar_oper R o)).
 Proof.
   apply wf_tpo_ind; simpl; intros.
   (* All cases by IH and context rewriting *)
-  all: try unfold_wf_bij_ren HWB.
-  all: econstructor; eauto; try now apply x.
+  all: try unfold wf_ren in HWF.
+  all: econstructor; eauto; try now apply HWF.
+  - rewrite HD.
+
+
   all: apply (ren_compose_ctxt_eq (bij_inv R HWB)) in HD; auto using bij_inv_wf.
   all: try rewrite ren_sum_compose in HD.
   all: repeat (erewrite ren_one_compose in HD; auto).
