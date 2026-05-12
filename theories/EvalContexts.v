@@ -173,6 +173,26 @@ Definition mutate_under_hole_scope (f : EC_proc -> EC_proc) (Et : EC_term) :=
 
 
 
+(* Gives the number of fvars bound by the hole scope *)
+Definition bound_fvars_at_hole_scope : EC_term -> nat :=
+  apply_at_hole_scope get_fvars_Et.
+
+(* Gives the number of fvars bound in all scopes *)
+Fixpoint bound_fvars_to_hole Et : nat :=
+  match Et with Ebag m _ EP => m + (bound_fvars_to_hole_proc EP) end
+with bound_fvars_to_hole_proc EP : nat :=
+  match EP with
+  | Ehol => 0
+  | Epar EP' _ => bound_fvars_to_hole_proc EP'
+  | Edeflam _ Et => bound_fvars_to_hole Et
+  end.
+  
+(* Gives the number of fvars bound before the hole scope *)
+Definition bound_fvars_before_hole_scope Et : nat :=
+  (bound_fvars_to_hole Et) - (bound_fvars_at_hole_scope Et).
+
+
+
 (* Apply renamings on ECs *)
 
 Fixpoint rename_rvar_EC_proc {n n'} (v : ren n n') (EP : EC_proc) :=
@@ -858,15 +878,15 @@ Lemma rename_rvar_pres_wf_EC_hs :
   forall EP m n G D G_hol D_hol,
     wf_EC_proc m n m n G D G_hol D_hol EP ->
     is_hole_scope_at_top_proc EP = true ->
-    forall (R : ren n n) (HWB : wf_bij_ren R),
-      wf_EC_proc m n m n G (ren_compose (bij_inv R HWB) D) 
-          G_hol (ren_compose (bij_inv R HWB) D_hol) (rename_rvar_EC_proc R EP).
+    forall (R : ren n n) (HWF : wf_ren R),
+      wf_EC_proc m n m n G (lctxt_rename R D)
+          G_hol (lctxt_rename R D_hol) (rename_rvar_EC_proc R EP).
 Proof.
   induction EP; simpl; intros.
   (* Ehol by context rewriting *)
   - inversion H; existT_eq; subst.
     econstructor; eauto.
-    rewrite ren_compose_ctxt_eq; eauto using bij_inv_wf. reflexivity.
+    rewrite lctxt_rename_ctxt_eq; eauto; reflexivity.
   (* Edeflam is contradiction *)
   - discriminate.
   (* Epar is by IH, context rewriting,
@@ -874,48 +894,34 @@ Proof.
   - inversion H; existT_eq; subst.
     econstructor; eauto.
     + apply rename_rvar_pres_wf; eauto.
-    + rewrite ren_compose_ctxt_eq; eauto using bij_inv_wf.
-      rewrite ren_sum_compose. reflexivity.
+    + rewrite <- lctxt_rename_sum.
+      rewrite lctxt_rename_ctxt_eq; eauto; reflexivity.
 Qed.
 
-(* Lemma rename_fvar_pres_wf :
-    (forall m n t,
-      wf_term m n t ->
-      forall (R : ren m m) (HWB : wf_bij_ren R),
-        wf_term m n (rename_fvar_term R t))
-/\  (forall m n G D P,
-      wf_proc m n G D P ->
-      forall (R : ren m m) (HWB : wf_bij_ren R),
-        wf_proc m n (ren_compose (bij_inv R HWB) G) D (rename_fvar_proc R P))
-/\  (forall m n G D o,
-      wf_oper m n G D o ->
-      forall (R : ren m m) (HWB : wf_bij_ren R),
-        wf_oper m n (ren_compose (bij_inv R HWB) G) D (rename_fvar_oper R o)).
+
+Lemma rename_fvar_pres_wf :
+    (forall m n m_hol n_hol G_hol D_hol Et,
+      wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
+      forall (R : ren m m) (HWF : wf_ren R),
+        let R_hol := ren_shift (bound_fvars_to_hole Et) R in
+        wf_EC_term m n m_hol n_hol (lctxt_rename R_hol G_hol) D_hol (rename_fvar_EC_term R Et))
+/\  (forall m n m_hol n_hol G D G_hol D_hol EP,
+      wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP ->
+      forall (R : ren m m) (HWF : wf_ren R),
+        let R_hol := ren_shift (bound_fvars_to_hole_proc EP) R in
+        wf_EC_proc m n m_hol n_hol (lctxt_rename R G) D (lctxt_rename R_hol G_hol) D_hol 
+                                                    (rename_fvar_EC_proc R EP)).
 Proof.
-  apply wf_tpo_ind; simpl; intros.
-  all: try unfold_wf_bij_ren HWB.
-  all: econstructor; eauto; try now apply x.
-  all: try apply (ren_compose_ctxt_eq (bij_inv R HWB)) in HG; auto using bij_inv_wf.
-  all: try rewrite ren_sum_compose in HG.
-  all: repeat (erewrite ren_one_compose in HG; auto).
-  all: repeat rewrite bij_inv_bij_inv_eq in HG.
-  all: try apply HG.
-  Unshelve. 2: apply bij_inv_wf_bij.
-  (* Bag is special because it extends the context *)
-  rewrite ren_shift_bij_app.
-  assert (wf_bij_ren (bij_app (ren_id m) R)) as HWB' by
-      (apply wf_bij_ren_app; auto using wf_bij_ren_id).
-  specialize H with 
-      (bij_app (ren_id m) R) 
-      (wf_bij_ren_app (ren_id m) R wf_bij_ren_id HWB).
-  rewrite bij_inv_app in H.
-  rewrite bij_inv_id in H.
-  rewrite <- ren_compose_app in H;
-      auto using wf_bij_ren_id, bij_inv_wf_bij.
-  rewrite ren_compose_id_l in H.
-  rewrite ren_compose_zero in H.
-  exact H.
-Qed. *)
+  apply wf_EC_ind; simpl; intros.
+  - admit.
+  - econstructor; eauto.
+    rewrite lctxt_rename_ctxt_eq; eauto.
+    unfold ren_shift; rewrite ctxt_app_0_l; simpl.
+    assert ((fun x : var => R x) = R) by now apply functional_extensionality.
+    rewrite H; reflexivity.
+  - admit.
+  - admit.
+Admitted.
 
 
 

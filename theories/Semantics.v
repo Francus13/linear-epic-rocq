@@ -168,25 +168,6 @@ Definition tuple_cut_hole_scope Et r1 r2 r1' r2' :=
 
 (* Helper functions for function application *)
 
-(* Gives the number of fvars bound by the hole scope *)
-Definition bound_fvars_at_hole_scope : EC_term -> nat :=
-  apply_at_hole_scope get_fvars_Et.
-
-(* Gives the number of fvars bound in all scopes *)
-Fixpoint bound_fvars_to_hole Et : nat :=
-  match Et with Ebag m _ EP => m + (bound_fvars_to_hole_proc EP) end
-with bound_fvars_to_hole_proc EP : nat :=
-  match EP with
-  | Ehol => 0
-  | Epar EP' _ => bound_fvars_to_hole_proc EP'
-  | Edeflam _ Et => bound_fvars_to_hole Et
-  end.
-  
-(* Gives the number of fvars bound before the hole scope *)
-Definition bound_fvars_before_hole_scope Et : nat :=
-  (bound_fvars_to_hole Et) - (bound_fvars_at_hole_scope Et).
-
-  
 (* Adds new bound fvars to the end of the top scope, shifting all free fvars *)
 Definition add_fvars m_new Et : EC_term :=
   let Et_new := match Et with Ebag m n EP => Ebag (m + m_new) n EP end in

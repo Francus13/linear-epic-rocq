@@ -1050,8 +1050,6 @@ Proof. intros; eapply rename_fvar_id_tpo; eauto. Qed.
 
 
 (* Renaming preserves well-formedness *)
-
-(* TODO Rework for just wf_ren, need to update the context *)
 Lemma rename_rvar_pres_wf :
     (forall m n t,
       wf_term m n t ->
@@ -1069,59 +1067,44 @@ Proof.
   (* All cases by IH and context rewriting *)
   all: try unfold wf_ren in HWF.
   all: econstructor; eauto; try now apply HWF.
-  - rewrite HD.
-
-
-  all: apply (ren_compose_ctxt_eq (bij_inv R HWB)) in HD; auto using bij_inv_wf.
-  all: try rewrite ren_sum_compose in HD.
-  all: repeat (erewrite ren_one_compose in HD; auto).
-  all: repeat rewrite bij_inv_bij_inv_eq in HD.
-  all: apply HD.
-  Unshelve. apply bij_inv_wf_bij.
-  Unshelve. apply bij_inv_wf_bij.
-  Unshelve. apply bij_inv_wf_bij.
-  Unshelve. apply bij_inv_wf_bij.
+  all: repeat rewrite <- lctxt_rename_one; auto.
+  all: try rewrite <- lctxt_rename_sum.
+  all: try erewrite <- lctxt_rename_zero.
+  all: try apply lctxt_rename_ctxt_eq; auto.
 Qed.
 
 Lemma rename_fvar_pres_wf :
     (forall m n t,
       wf_term m n t ->
-      forall (R : ren m m) (HWB : wf_bij_ren R),
+      forall (R : ren m m) (HWF : wf_ren R),
         wf_term m n (rename_fvar_term R t))
 /\  (forall m n G D P,
       wf_proc m n G D P ->
-      forall (R : ren m m) (HWB : wf_bij_ren R),
-        wf_proc m n (ren_compose (bij_inv R HWB) G) D (rename_fvar_proc R P))
+      forall (R : ren m m) (HWF : wf_ren R),
+        wf_proc m n (lctxt_rename R G) D (rename_fvar_proc R P))
 /\  (forall m n G D o,
       wf_oper m n G D o ->
-      forall (R : ren m m) (HWB : wf_bij_ren R),
-        wf_oper m n (ren_compose (bij_inv R HWB) G) D (rename_fvar_oper R o)).
+      forall (R : ren m m) (HWF : wf_ren R),
+        wf_oper m n (lctxt_rename R G) D (rename_fvar_oper R o)).
 Proof.
   apply wf_tpo_ind; simpl; intros.
-  (* Most cases by IH and context rewriting *)
-  all: try unfold_wf_bij_ren HWB.
-  all: econstructor; eauto; try now apply x.
-  all: try apply (ren_compose_ctxt_eq (bij_inv R HWB)) in HG; auto using bij_inv_wf.
-  all: try rewrite ren_sum_compose in HG.
-  all: repeat (erewrite ren_one_compose in HG; auto).
-  all: repeat rewrite bij_inv_bij_inv_eq in HG.
-  all: try apply HG.
-  Unshelve. 2: apply bij_inv_wf_bij.
+  (* All cases by IH and context rewriting *)
+  assert (HWF' := HWF).
+  all: try unfold wf_ren in HWF.
+  all: econstructor; eauto; try now apply HWF.
+  shelve.
+  all: repeat rewrite <- lctxt_rename_one; auto.
+  all: try rewrite <- lctxt_rename_sum.
+  all: try erewrite <- lctxt_rename_zero.
+  all: try apply lctxt_rename_ctxt_eq; auto.
   (* Bag needs specific context rewritings 
       because it extends the context *)
-  rewrite ren_shift_bij_app.
-  assert (wf_bij_ren (bij_app (ren_id m) R)) as HWB' by
-      (apply wf_bij_ren_app; auto using wf_bij_ren_id).
-  specialize H with 
-      (bij_app (ren_id m) R) 
-      (wf_bij_ren_app (ren_id m) R wf_bij_ren_id HWB).
-  rewrite bij_inv_app in H.
-  rewrite bij_inv_id in H.
-  rewrite <- ren_compose_app in H;
-      auto using wf_bij_ren_id, bij_inv_wf_bij.
-  rewrite ren_compose_id_l in H.
-  rewrite ren_compose_zero in H.
-  exact H.
+  Unshelve.
+  rewrite <- lctxt_rename_id with (c := G).
+  rewrite <- (@lctxt_rename_zero m' m' R).
+  rewrite <- lctxt_rename_app; auto using wf_ren_id.
+  fold (@ren_shift m' m' m R).
+  apply H. now apply wf_ren_shift.
 Qed.
 
 
@@ -1133,8 +1116,12 @@ t1 seq t1' peq t2 => t1 aeq t2
 symmetry, reflexivity, transitivity of aeq *)
 
 
-
-(* nu equivalence -------------------------------------------------------- *)
+(* FRAN: Commented this out 5/12/2026.
+          This doesn't work with new definition of wf_ren.
+          There could be two wf_ren judgements,
+          but I'll leave it as is until
+          there's a reason to have nu equivalence around. *)
+(* nu equivalence --------------------------------------------------------
 (* The "nu-bound" variables within a bag can be permuted without affecting the
 meaning of the term.
 
@@ -1533,5 +1520,5 @@ Proof.
       repeat rewrite ren_compose_app; auto using bij_inv_wf_bij.
       repeat rewrite bij_app_inv.
       apply H; auto.
-Qed.    
+Qed.     *)
 

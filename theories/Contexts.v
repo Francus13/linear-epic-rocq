@@ -142,8 +142,16 @@ Proof.
   destruct (lt_dec x n).
   - lia.
   - reflexivity.
-Qed.  
+Qed.
 
+Lemma ctxt_app_0_l : forall {X n} (c : ctxt 0 X) (d : ctxt n X),
+  (c ⊗ d) = d.
+Proof.
+  intros. unfold ctxt_app; apply functional_extensionality; intros.
+  destruct (lt_dec x 0).
+  - lia.
+  - rewrite Nat.sub_0_r; auto.
+Qed.
 
 Lemma ctxt_app_assoc : forall {X} {n m l} (c : ctxt n X) (d : ctxt m X) (e : ctxt l X),
     c ⊗ (d ⊗ e) = (c ⊗ d) ⊗ e.
@@ -751,6 +759,8 @@ Module Renamings.
 *)
 
 
+
+(* Renaming by the identity does nothing. *)
   Lemma ren_id_id :
     forall (n : nat) x,
       x < n ->
@@ -761,7 +771,11 @@ Module Renamings.
     destruct (lt_dec x n); auto.
   Qed.
 
-  (* Renaming by the identity does nothing. *)
+  Lemma wf_ren_id : forall {n}, wf_ren (ren_id n).
+  Proof. 
+    unfold wf_ren, ren_id. intros.
+    destruct (lt_dec x n); split; tauto.
+  Defined.
 
 Lemma map_ren_id :
   forall (l : list nat)
@@ -988,6 +1002,24 @@ Proof.
       rewrite sum_zero_l; auto.
 Qed.
 
+Lemma lctxt_rename_one : forall {n m} (r : ren n m) x,
+    x < n ->
+    lctxt_rename r (one n x) = one m (r x).
+Proof.
+  unfold one; intros; apply lctxt_rename_delta; auto.
+Qed.
+
+Lemma lctxt_rename_zero : forall {n m} (r : ren n m),
+    lctxt_rename r (zero n) = zero m.
+Proof.
+  intros. unfold lctxt_rename.
+  enough (forall i, lctxt_rename_helper i r (zero n) = zero m); auto.
+  induction i; simpl; intros; auto.
+  rewrite IHi.
+  unfold zero at 1, flat_ctxt. 
+  rewrite zero_delta, sum_zero_l; auto.
+Qed.
+
 Lemma lctxt_rename_ctxt_eq : forall {n m} (r : ren n m) (c1 c2 : lctxt n),
     c1 ≡[n] c2 ->
     lctxt_rename r c1 ≡[m] lctxt_rename r c2.
@@ -1029,6 +1061,23 @@ Proof.
     rewrite <- delta_app_zero_l; try (apply H0; lia).
     rewrite lctxt_sum_app_dist.
     rewrite sum_zero_l; auto.
+Qed.
+
+Lemma lctxt_rename_id : forall {n} (c : lctxt n),
+    lctxt_rename (ren_id n) c ≡[n] c.
+Proof.
+  intros. unfold lctxt_rename.
+  enough (forall i, i <= n -> (lctxt_rename_helper i (ren_id n) c ≡[i] c)
+                 /\ (forall x, i <= x -> lctxt_rename_helper i (ren_id n) c x = 0)).
+  { now apply H. }
+  unfold ctxt_eq; induction i; simpl; intros; split; intros; auto; try lia.
+  all: destruct IHi; try lia.
+  all: rewrite sum_correct.
+  all: unfold delta; rewrite ren_id_id; auto.
+  all: destruct (lt_dec i n); destruct (Nat.eq_dec i x); subst; try lia.
+  - rewrite H2; auto.
+  - rewrite H1; lia.
+  - rewrite H2; lia.
 Qed.
 
 
@@ -1136,12 +1185,6 @@ Ltac unfold_wf_bij_ren WBH :=
           let a := fresh in let b := fresh in let c := fresh in
             destruct H as [a [b c]]
   end.
-
-  Lemma wf_ren_id : forall {n}, wf_ren (ren_id n).
-  Proof. 
-    unfold wf_ren, ren_id. intros.
-    destruct (lt_dec x n); split; tauto.
-  Defined.
 
   Lemma bij_ren_id : forall {n}, bij_ren (ren_id n).
   Proof. 
