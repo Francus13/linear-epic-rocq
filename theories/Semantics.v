@@ -90,21 +90,14 @@ Definition ren_commute_str m0 m1 m2 m3 :
 Definition rename_var n (x:var) (y:var) : ren n n :=
   fun z => if Nat.eq_dec z x then y else z.
 
-Lemma renamve_var_wf_bij :
+Lemma rename_var_wf :
   forall n x y,
     x < n -> y < n ->
     wf_ren (rename_var n x y).
 Proof.
-  intros. unfold wf_bij_ren, wf_ren, bij_ren, rename_var.
-  repeat constructor; intros.
-  - destruct (Nat.eq_dec x0 x); auto.
-  - destruct (Nat.eq_dec x0 x); try lia. admit.
-  - exists (fun z => if Nat.eq_dec z y then x else z); split.
-    shelve.
-    unfold ren_inverses; intros; split.
-    + destruct (Nat.eq_dec x0 x).
-    .
-Admitted.
+  unfold wf_ren, rename_var; intros; split.
+  all: destruct (Nat.eq_dec x0 x); lia.
+Qed.
 
 
 
@@ -125,35 +118,49 @@ Definition cut_renaming n (r1 r2 r1' r2':nat) : ren n n :=
   if Nat.eq_dec r1 r2 then
     rename_if_neq n r1' r2'
   else if Nat.eq_dec r1' r2' then
-    rename_var r1 r2
+    rename_var n r1 r2
   (* Second, check if a variable is equal to its
       non-corresponding variable in the other pair *)
   else if Nat.eq_dec r1 r2' then
     rename_if_neq n r1' r2
   else if Nat.eq_dec r1' r2 then
-    rename_var r1 r2'
+    rename_var n r1 r2'
   (* Third, check if a variable is equal to its
       corresponding variable in the other pair *)
   else if Nat.eq_dec r1 r1' then
     rename_if_neq n r2 r2'
   else if Nat.eq_dec r2 r2' then
-    rename_var r1 r1'
+    rename_var n r1 r1'
   (* Now we know there are no equalities between the variables *)
   else
-    @ren_compose n n nat (rename_var r1 r1') (rename_var r2 r2').
+    @ren_compose n n nat (rename_var n r1 r1') (rename_var n r2 r2').
 
 
+Lemma rename_if_neq_wf :
+  forall n r1 r2,
+    r1 < n -> r2 < n ->
+    wf_ren (rename_if_neq n r1 r2).
+Proof.
+  unfold rename_if_neq; intros.
+  destruct (Nat.eq_dec r1 r2).
+  - apply wf_ren_id.
+  - apply rename_var_wf; auto.
+Qed.
 
-Lemma cut_renaming_wf_bij : 
+Lemma cut_renaming_wf : 
   forall n r1 r2 r1' r2',
     r1 < n -> r2 < n -> r1' < n -> r2' < n ->
-    wf_bij_ren (cut_renaming n r1 r2 r1' r2').
+    wf_ren (cut_renaming n r1 r2 r1' r2').
 Proof.
-  intros. unfold wf_bij_ren, cut_renaming.
-
+  intros; unfold cut_renaming.
+  destruct (Nat.eq_dec r1 r2); destruct (Nat.eq_dec r1' r2');
+      destruct (Nat.eq_dec r1 r2'); destruct (Nat.eq_dec r1' r2);
+      destruct (Nat.eq_dec r1 r1'); destruct (Nat.eq_dec r2 r2');
+      auto using wf_ren_compose, rename_var_wf, rename_if_neq_wf.
 Qed.
 
 
+(* TODO: Need to have the semantics track number of rvars in scope *)
 (* Gives the number of rvars in scope at the hole *)
 Definition scoped_rvars_at_hole : EC_term -> nat := 
   case_hole_scope_at_top 
@@ -187,7 +194,7 @@ Definition ready_body_rvar (n_app n r_arg : nat) (P : proc) : proc :=
   let P1 := rename_rvar_proc (weaken_ren (n + 1) n_app) P in
     (* Replace the single free rvar (i.e. the parameter) with the argument r_arg *)
   let n_total := n + 1 + n_app in
-  @rename_rvar_proc n_total n_total (rename_var (n + n_app) r_arg) P1.
+  rename_rvar_proc (rename_var n_total (n + n_app) r_arg) P1.
 
 (* Renames fvars in a lambda body for an application,
    for when the lambda and application are in the same scope
@@ -390,7 +397,8 @@ Proof.
       rewrite H, <- HD3 in WFP; clear H.
       apply delta_ctxt_eq_app_inv in HD2. 
       apply wf_Ebag with (G := G) (D := D1); auto; subst.
-      * intros. unfold ctxt_eq in HD3; specialize HD3 with x. rewrite lctxt_sum in HD3. 
+      * intros. unfold ctxt_eq in HD3; specialize HD3 with x.
+        rewrite sum_correct in HD3. 
         specialize UD with x. rewrite <- HD3 in UD; auto.
         destruct HD2; destruct H0; clear H3.
         all: unfold ctxt_eq in H0; specialize H0 with x.
@@ -444,7 +452,18 @@ Proof.
   destruct (inv_split_hole_scope (Ebag m0 n0 EP)); dest_conj_disj_exist.
   all: rewrite H4.
   - apply inv_split_hole_scope_Ehol_hs in H4. rewrite H4. simpl.
-    econstructor; eauto.
+    eapply hole_scope_at_top_wf_simpl_proc in H4; eauto.
+    destruct H4; subst.
+    remember (cut_renaming n0 r1 r2 r1' r2') as R. (* For clarity *)
+    eapply wf_Ebag with (D := lctxt_rename R D); eauto.
+    2: rewrite <- (lctxt_rename_id (flat_ctxt 1 n)).
+    2: rewrite <- lctxt_rename_app; auto using wf_ren_id.
+    assert (wf_ren R). {subst; apply cut_renaming_wf; auto. }
+    + admit.
+    + rewrite <- (lctxt_rename_id (flat_ctxt 1 n)).
+      rewrite <- lctxt_rename_app; auto using wf_ren_id.
+
+    eapply rename_rvar_pres_wf_EC_hs.
     admit. (* Need the cut renaming to preserve wf *)
   - assert (H5 := H4); assert (H6 := H4). 
     (* Get hole scope <> top scope *)

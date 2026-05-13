@@ -1067,10 +1067,11 @@ Proof.
   (* All cases by IH and context rewriting *)
   all: try unfold wf_ren in HWF.
   all: econstructor; eauto; try now apply HWF.
-  all: repeat rewrite <- lctxt_rename_one; auto.
-  all: try rewrite <- lctxt_rename_sum.
-  all: try erewrite <- lctxt_rename_zero.
-  all: try apply lctxt_rename_ctxt_eq; auto.
+  all: rewrite lctxt_rename_ctxt_eq; eauto.
+  all: try erewrite lctxt_rename_zero.
+  all: try rewrite lctxt_rename_sum.
+  all: repeat rewrite lctxt_rename_one; auto.
+  all: reflexivity.
 Qed.
 
 Lemma rename_fvar_pres_wf :
@@ -1093,10 +1094,10 @@ Proof.
   all: try unfold wf_ren in HWF.
   all: econstructor; eauto; try now apply HWF.
   shelve.
-  all: repeat rewrite <- lctxt_rename_one; auto.
-  all: try rewrite <- lctxt_rename_sum.
-  all: try erewrite <- lctxt_rename_zero.
-  all: try apply lctxt_rename_ctxt_eq; auto.
+  all: rewrite lctxt_rename_ctxt_eq; eauto.
+  all: try erewrite lctxt_rename_zero.
+  all: try rewrite lctxt_rename_sum.
+  all: now repeat rewrite lctxt_rename_one; auto.
   (* Bag needs specific context rewritings 
       because it extends the context *)
   Unshelve.

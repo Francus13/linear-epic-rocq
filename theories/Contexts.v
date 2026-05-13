@@ -828,6 +828,18 @@ Qed.
       destruct (lt_dec x (k + n)); lia.
   Qed.
 
+  Lemma ren_shift_combine : forall {n m} k1 k2 (r : ren n m),
+      ren_shift k1 (ren_shift k2 r) = ren_shift (k1 + k2) r.
+  Proof.
+    intros.
+    unfold ren_shift, ren_id, ctxt_app.
+    apply functional_extensionality; intros.
+    destruct (lt_dec x k1); destruct (lt_dec x (k1 + k2));
+        destruct (lt_dec (x - k1) k2); destruct (lt_dec x (k1 + k2)); try lia.
+        replace (x - k1 - k2) with (x - (k1 + k2)) by lia; lia.
+  Qed.
+
+
   Definition ren_compose {n m X} (r : ren n m) (c : ctxt m X) : ctxt n X :=
     compose c r.
 

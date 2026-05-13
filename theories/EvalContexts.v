@@ -821,6 +821,16 @@ Proof.
   discriminate H0.
 Qed.
 
+Lemma hole_scope_at_top_wf_simpl_term : forall m n m_hol n_hol G_hol D_hol Et,
+  wf_EC_term m n m_hol n_hol G_hol D_hol Et -> is_hole_scope_at_top Et = true ->
+  m_hol = (get_fvars_Et Et) + m  /\ n_hol = (get_rvars_Et Et) + n.
+Proof. apply hole_scope_at_top_wf_simpl. Qed.
+Lemma hole_scope_at_top_wf_simpl_proc : forall m n m_hol n_hol G D G_hol D_hol EP,
+  wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP -> is_hole_scope_at_top_proc EP = true ->
+  m_hol = m  /\ n_hol = n.
+Proof. apply hole_scope_at_top_wf_simpl. Qed.
+
+
 
 
 (* If an EC is wf, then splitting it at its hole scope gives
@@ -886,7 +896,7 @@ Proof.
   (* Ehol by context rewriting *)
   - inversion H; existT_eq; subst.
     econstructor; eauto.
-    rewrite lctxt_rename_ctxt_eq; eauto; reflexivity.
+    now apply lctxt_rename_ctxt_eq.
   (* Edeflam is contradiction *)
   - discriminate.
   (* Epar is by IH, context rewriting,
@@ -894,12 +904,12 @@ Proof.
   - inversion H; existT_eq; subst.
     econstructor; eauto.
     + apply rename_rvar_pres_wf; eauto.
-    + rewrite <- lctxt_rename_sum.
-      rewrite lctxt_rename_ctxt_eq; eauto; reflexivity.
+    + rewrite lctxt_rename_ctxt_eq; eauto.
+      now rewrite lctxt_rename_sum.
 Qed.
 
 
-Lemma rename_fvar_pres_wf :
+Lemma rename_fvar_pres_wf_EC :
     (forall m n m_hol n_hol G_hol D_hol Et,
       wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
       forall (R : ren m m) (HWF : wf_ren R),
@@ -913,15 +923,36 @@ Lemma rename_fvar_pres_wf :
                                                     (rename_fvar_EC_proc R EP)).
 Proof.
   apply wf_EC_ind; simpl; intros.
-  - admit.
+  (* All cases are essentially context rewriting and IH when appropriate *)
+  (* Ebag *)
   - econstructor; eauto.
-    rewrite lctxt_rename_ctxt_eq; eauto.
+    rewrite <- lctxt_rename_id with (c := G).
+    rewrite <- (@lctxt_rename_zero m' m' R).
+    rewrite <- lctxt_rename_app; auto using wf_ren_id.
+    fold (@ren_shift m' m' m R).
+    rewrite (Nat.add_comm m (bound_fvars_to_hole_proc EP)).
+    rewrite <- ren_shift_combine.
+    (* Need to rewrite addition associativity in the implicit parameters
+        to make the goal and IH line up *)
+    Set Printing All. repeat rewrite Nat.add_assoc in *.
+    apply (H (ren_shift m R)). Unset Printing All.
+    now apply wf_ren_shift.
+    (* Ehol *)
+  - econstructor; eauto.
     unfold ren_shift; rewrite ctxt_app_0_l; simpl.
     assert ((fun x : var => R x) = R) by now apply functional_extensionality.
-    rewrite H; reflexivity.
-  - admit.
-  - admit.
-Admitted.
+    rewrite H; clear H.
+    now apply lctxt_rename_ctxt_eq.
+    (* Edeflam *)
+  - econstructor; eauto.
+    rewrite lctxt_rename_ctxt_eq; eauto.
+    now rewrite lctxt_rename_zero.
+    (* Epar *)
+  - econstructor; eauto.
+    + apply rename_fvar_pres_wf; eauto.
+    + rewrite lctxt_rename_ctxt_eq; eauto.
+      now rewrite lctxt_rename_sum.
+Qed.
 
 
 
