@@ -159,16 +159,22 @@ Proof.
       auto using wf_ren_compose, rename_var_wf, rename_if_neq_wf.
 Qed.
 
+Lemma cut_renaming_last_id :
+  forall n r1 r2 r1' r2',
+    wf_ren (cut_renaming (S n) r1 r2 r1' r2') ->
+      cut_renaming (S n) r1 r2 r1' r2' =
+      @ctxt_app _ (S n) (S n) (cut_renaming n r1 r2 r1' r2') (ren_id 1).
+Proof.
+  intros.
+Qed.
 
-(* TODO: Need to have the semantics track number of rvars in scope *)
-(* Gives the number of rvars in scope at the hole *)
-Definition scoped_rvars_at_hole : EC_term -> nat := 
-  case_hole_scope_at_top 
-    (get_rvars_Et) 
-    (fun Et => 1 + (get_rvars_Et Et)).
+Lemma cut_renaming_indep :
+  forall n m, cut_renaming n = cut_renaming m.
+Proof. unfold cut_renaming; reflexivity. Qed.
+
 
 Definition tuple_cut_hole_scope Et r1 r2 r1' r2' := 
-  let ren := cut_renaming (scoped_rvars_at_hole Et) r1 r2 r1' r2' in
+  let ren := cut_renaming 0 r1 r2 r1' r2' in
   mutate_under_hole_scope (rename_rvar_EC_proc ren) Et.
 
 
@@ -443,22 +449,22 @@ Lemma tuple_cut_ren_EC_wf :
     wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
     forall r1 r2 r1' r2',
       r1 < n_hol -> r2 < n_hol -> r1' < n_hol -> r2' < n_hol -> 
-    wf_EC_term m n m_hol n_hol G_hol D_hol 
+    wf_EC_term m n m_hol n_hol G_hol 
+        (lctxt_rename (cut_renaming 0 r1 r2 r1' r2') D_hol) 
         (tuple_cut_hole_scope Et r1 r2 r1' r2').
 Proof.
   intros. inversion H; existT_eq; subst.
   unfold tuple_cut_hole_scope, mutate_under_hole_scope.
-  unfold scoped_rvars_at_hole, case_hole_scope_at_top, hole_scope. 
+  rewrite (cut_renaming_indep 0 n_hol).
   destruct (inv_split_hole_scope (Ebag m0 n0 EP)); dest_conj_disj_exist.
   all: rewrite H4.
-  - apply inv_split_hole_scope_Ehol_hs in H4. rewrite H4. simpl.
+  - apply inv_split_hole_scope_Ehol_hs in H4.
+    assert (H5 := H4).
     eapply hole_scope_at_top_wf_simpl_proc in H4; eauto.
     destruct H4; subst.
-    remember (cut_renaming n0 r1 r2 r1' r2') as R. (* For clarity *)
-    eapply wf_Ebag with (D := lctxt_rename R D); eauto.
-    2: rewrite <- (lctxt_rename_id (flat_ctxt 1 n)).
-    2: rewrite <- lctxt_rename_app; auto using wf_ren_id.
+    remember (cut_renaming (n0 + n) r1 r2 r1' r2') as R. (* For clarity *)
     assert (wf_ren R). {subst; apply cut_renaming_wf; auto. }
+    eapply wf_Ebag with (D := lctxt_rename R D); eauto.
     + admit.
     + rewrite <- (lctxt_rename_id (flat_ctxt 1 n)).
       rewrite <- lctxt_rename_app; auto using wf_ren_id.

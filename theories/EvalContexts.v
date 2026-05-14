@@ -542,6 +542,7 @@ Inductive wf_EC_term : forall (m n m_hol n_hol:nat),
     lctxt m_hol -> lctxt n_hol -> EC_term -> Prop :=
 | wf_Ebag :
   forall m n m' n' m_hol n_hol
+    (HN' : n' <= 1)
     (G : lctxt m) (D : lctxt n)
     (G_hol : lctxt m_hol) (D_hol : lctxt n_hol)
     (UG : forall x, x < m -> (G x) = 1)
