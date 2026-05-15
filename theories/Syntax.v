@@ -89,12 +89,13 @@ Inductive term :=
 with proc :=
 | def (r:rvar) (o:oper)  (* r <- o *)
 | app (f:fvar) (r:rvar)  (* f r *)
+| req (r1 r2 : rvar)     (* r1 = r2 *)
 | par (P1 P2 : proc)     (* P1 | P2 *)
 | nul
 
 with oper :=
-| emp                    (* empty tuple *)
-| tup (r1 r2:rvar)       (* (r1,r2) *)
+| emp                    (* () *)
+| tup (r1 r2:rvar)       (* (r1, r2) *)
 | bng (f:fvar)           (* !f *)
 | lam (t : term).        (* lam r. t *)
 
@@ -159,6 +160,12 @@ with ws_proc : nat -> nat -> proc -> Prop :=
     (WSP1 : ws_proc m n P1)
     (WSP2 : ws_proc m n P2),
     ws_proc m n (par P1 P2)
+
+| ws_req :
+  forall m n
+    (r1 r2 : rvar)
+    (HR1 : r1 < n) (HR2 : r2 < n),
+    ws_proc m n (req r1 r2)
 
 | ws_nul :
   forall m n,
@@ -252,6 +259,10 @@ with seq_proc : proc -> proc -> Prop :=
   forall r o1 o2,
     seq_oper o1 o2 ->
     seq_proc (def r o1) (def r o2)
+
+| seq_req_comm :
+  forall r1 r2,
+    seq_proc (req r1 r2) (req r2 r1)
              
 with seq_oper : oper -> oper -> Prop :=
 | seq_oper_refl :
@@ -534,6 +545,15 @@ with wf_proc : forall (m n:nat), lctxt m -> lctxt n -> proc -> Prop :=
     (HD : D ≡[n] (D1 ⨥ D2)),
     wf_proc m n G D (par P1 P2)
 
+| wf_req :
+  forall m n
+    (G : lctxt m) (D : lctxt n)
+    (r1 : rvar) (HR1 : r1 < n)
+    (r2 : rvar) (HR2 : r2 < n)
+    (HG : G ≡[m] (zero m))
+    (HD : D ≡[n] (one n r1 ⨥ one n r2)),
+    wf_proc m n G D (req r1 r2)
+
 | wf_nul :
   forall m n
     (G : lctxt m) (D : lctxt n)
@@ -685,6 +705,11 @@ Proof.
       * reflexivity.
       * rewrite <- sum_assoc. rewrite <- HG0. assumption.
       * rewrite <- sum_assoc. rewrite <- HD0. assumption.
+  (* Req Commutative *)
+  - split; intros.
+    all: inversion H; existT_eq; subst.
+    all: rewrite sum_commutative in HD.
+    all: constructor; auto.
 Qed.
 
 Lemma wf_seq_term : forall t1 t2 m n, 
@@ -860,6 +885,7 @@ Fixpoint rename_rvar_proc {n n'} (v : ren n n') P : proc :=
   | def r o => def (v r) (rename_rvar_oper v o)
   | app f r => app f (v r)
   | par P1 P2 => par (rename_rvar_proc v P1) (rename_rvar_proc v P2)
+  | req r1 r2 => req (v r1) (v r2)
   | nul => nul
   end.
 
@@ -885,6 +911,7 @@ with rename_fvar_proc {m m'} (v : ren m m') (P : proc) : proc :=
   | def r o => def r (rename_fvar_oper v o)
   | app f r => app (v f) r
   | par P1 P2 => par (rename_fvar_proc v P1) (rename_fvar_proc v P2)
+  | req r1 r2 => req r1 r2
   | nul => nul
   end
 

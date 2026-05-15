@@ -86,22 +86,47 @@ Definition ren_commute_str m0 m1 m2 m3 :
 
 (* Operational Semantics --------------------------------------------------- *)
 
-(* z{y/x} *)
-Definition rename_var n (x:var) (y:var) : ren n n :=
-  fun z => if Nat.eq_dec z x then y else z.
+(* Replaces x for y or y for x if either are below n.
+    If neither are below n, then it is just an identity renaming. *)
+Definition rename_var n_scope n (x:var) (y:var) : ren n_scope n_scope :=
+  fun z => if lt_dec x n
+           then if Nat.eq_dec z x
+                then y
+                else z
+           else if lt_dec y n
+           then if Nat.eq_dec y z
+                then x
+                else z
+           else z.
 
 Lemma rename_var_wf :
-  forall n x y,
-    x < n -> y < n ->
-    wf_ren (rename_var n x y).
+  forall n_scope n x y,
+    n <= n_scope ->
+    x < n_scope ->
+    y < n_scope ->
+    wf_ren (rename_var n_scope n x y).
 Proof.
   unfold wf_ren, rename_var; intros; split.
-  all: destruct (Nat.eq_dec x0 x); lia.
+  all: destruct (lt_dec x n); destruct (lt_dec y n); 
+        destruct (Nat.eq_dec x0 x); destruct (Nat.eq_dec y x0); lia.
 Qed.
 
+Lemma rename_var_indep :
+  forall n n1 n2, rename_var n1 n = rename_var n2 n.
+Proof. unfold rename_var; reflexivity. Qed.
+
+
+(* We use n for the number of scoped rvar variables
+    since it is only important when the Et is well-formed,
+    in which case we can rewrite to the actual number of free rvars
+    using lemma rename_var_indep above. *)
+Definition rename_at_hole_scope n r1 r2 Et :=
+  let apply_ren := (rename_rvar_EC_proc (rename_var n n r1 r2)) in
+  mutate_under_hole_scope apply_ren Et.
 
 
 
+(* 
 (* Helper functions for tuple cuts *)
                   
 (* Gives a "collapsed" renaming that only renames r1 to r2 *)
@@ -159,15 +184,6 @@ Proof.
       auto using wf_ren_compose, rename_var_wf, rename_if_neq_wf.
 Qed.
 
-Lemma cut_renaming_last_id :
-  forall n r1 r2 r1' r2',
-    wf_ren (cut_renaming (S n) r1 r2 r1' r2') ->
-      cut_renaming (S n) r1 r2 r1' r2' =
-      @ctxt_app _ (S n) (S n) (cut_renaming n r1 r2 r1' r2') (ren_id 1).
-Proof.
-  intros.
-Qed.
-
 Lemma cut_renaming_indep :
   forall n m, cut_renaming n = cut_renaming m.
 Proof. unfold cut_renaming; reflexivity. Qed.
@@ -175,8 +191,7 @@ Proof. unfold cut_renaming; reflexivity. Qed.
 
 Definition tuple_cut_hole_scope Et r1 r2 r1' r2' := 
   let ren := cut_renaming 0 r1 r2 r1' r2' in
-  mutate_under_hole_scope (rename_rvar_EC_proc ren) Et.
-
+  mutate_under_hole_scope (rename_rvar_EC_proc ren) Et. *)
 
 
 (* Helper functions for function application *)
@@ -198,9 +213,9 @@ Definition add_fvars_hole_scope m_new : EC_term -> EC_term :=
 Definition ready_body_rvar (n_app n r_arg : nat) (P : proc) : proc :=
     (* Weaken the scope : [n + 1] -> [n_app + n + 1] *)
   let P1 := rename_rvar_proc (weaken_ren (n + 1) n_app) P in
-    (* Replace the single free rvar (i.e. the parameter) with the argument r_arg *)
+    (* Equate the single free rvar (i.e. the parameter) with the argument r_arg *)
   let n_total := n + 1 + n_app in
-  rename_rvar_proc (rename_var n_total (n + n_app) r_arg) P1.
+  par (req (n + n_app) r_arg) P1.
 
 (* Renames fvars in a lambda body for an application,
    for when the lambda and application are in the same scope
@@ -237,20 +252,20 @@ Definition ready_body_fvar_diff_scope (m_inner m_app m : nat) (P : proc) : proc 
 Definition ready_body_same_scope (Et : EC_term) (t : term) (r_arg : nat) : proc :=
   match t with bag m n P =>
     (* Do rvar renaming *)
-    let n_app := apply_at_hole_scope get_rvars_Et Et in
+    let n_app := bound_rvars_at_hole_scope Et in
     let P' := ready_body_rvar n_app n r_arg P in
     (* Do fvar renaming *)
-    let m_app := apply_at_hole_scope get_fvars_Et Et in
+    let m_app := bound_fvars_at_hole_scope Et in
     ready_body_fvar_same_scope m_app m P'
   end.
 
 Definition ready_body_diff_scope (Et : EC_term) (t : term) (r_arg : nat) : proc :=
   match t with bag m n P =>
     (* Do rvar renaming *)
-    let n_app := apply_at_hole_scope get_rvars_Et Et in
+    let n_app := bound_rvars_at_hole_scope Et in
     let P' := ready_body_rvar n_app n r_arg P in
     (* Do fvar renaming *)
-    let m_app := apply_at_hole_scope get_fvars_Et Et in
+    let m_app := bound_fvars_at_hole_scope Et in
     let m_inner := bound_fvars_before_hole_scope Et in
     ready_body_fvar_diff_scope m_inner m_app m P'
   end.
@@ -299,8 +314,9 @@ Inductive prim_step : term -> term -> Prop :=
   forall Et r r1 r2 r1' r2',    (*  -->  ET{r1=r1',r2=r2'} <=[ nul ]  *)
     prim_step
       (Et <=[ par (def r (tup r1 r2)) (def r (tup r1' r2')) ])
-      ((tuple_cut_hole_scope Et r1 r2 r1' r2') <=[ nul ])
+      (Et <=[ par (req r1 r1') (req r2 r2') ])
       
+(* TODO update with req for arg *)
 | step_app_same_scope :    (*  Et <=[ rf <- lam r'. t | rf <- ?f | f r ]  *)
   forall Et t f rf r,    (*  -->  Et <=[ '' | '' | fresh_body(t){r=r'} ]  *)
       (* Get the freshened and applied body *)
@@ -308,12 +324,12 @@ Inductive prim_step : term -> term -> Prop :=
       (* Shift the fvars in the application's scope *)
     let Et_shifted := add_fvars_hole_scope (get_fvars t) Et in
     prim_step
-    (Et         <=[ (par (app f r)
-                    (par (def rf (lam t))
-                         (def rf (bng f)))) ])
-    (Et_shifted <=[ (par (new_body)
-                    (par (def rf (lam t))
-                         (def rf (bng f)))) ])
+      (Et         <=[ (par (app f r)
+                      (par (def rf (lam t))
+                          (def rf (bng f)))) ])
+      (Et_shifted <=[ (par (new_body)
+                      (par (def rf (lam t))
+                          (def rf (bng f)))) ])
       
 | step_app_diff_scope :    (*  Et' <=[ rf <- lam r'. t | rf <- ?f | Et <=[ f r ] ]  *)
   forall Et Et' t f rf rl r,    (*  -->  Et' <=[ '' | '' | Et <=[ fresh_body(t){r=r'} ] ]  *)
@@ -324,20 +340,29 @@ Inductive prim_step : term -> term -> Prop :=
       (* Shift the fvars in the application's scope *)
     let Et_shifted := add_fvars_hole_scope (get_fvars t) Et in
     prim_step
-    (Et' <=[ (par (def rl (lam (Et         <=[ app f' r ])))
-             (par (def rf (lam t))
-                  (def rf (bng f)))) ])
-    (Et' <=[ (par (def rl (lam (Et_shifted <=[ new_body ])))
-             (par (def rf (lam t))
-                  (def rf (bng f)))) ])
+      (Et' <=[ (par (def rl (lam (Et         <=[ app f' r ])))
+              (par (def rf (lam t))
+                    (def rf (bng f)))) ])
+      (Et' <=[ (par (def rl (lam (Et_shifted <=[ new_body ])))
+              (par (def rf (lam t))
+                    (def rf (bng f)))) ])
 
-| step_remove_function :
+| step_req :    (*  Et <=[ r1 = r2 ]  -->  (rename_at_hole_scope Et r1 r2) <=[ nul ]  *)
+  forall Et r1 r2,
+    let n := bound_rvars_at_hole_scope Et in
+    r1 < n /\ r2 < n ->
+    prim_step
+      (Et <=[ req r1 r2 ])
+      ((rename_at_hole_scope n r1 r2 Et) <=[ nul ])
+
+(* No motivating reason to have right now *)
+(* | step_remove_function :
   forall Et t f rf,
     can_remove_function f Et = true ->
     prim_step
     (Et <=[ (par (def rf (lam t))
                 (def rf (bng f))) ])
-    (Et <=[ nul ])
+    (Et <=[ nul ]) *)
 .
 
 
@@ -442,28 +467,32 @@ Qed.
 
 
 
-(* Doing a tuple cut preserves well-formedness *)
+(* Doing a substitution preserves well-formedness *)
 Lemma tuple_cut_ren_EC_wf : 
   forall (m n m_hol n_hol:nat) (G_hol : lctxt m_hol) (D_hol : lctxt n_hol)
         (Et : EC_term),
     wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
-    forall r1 r2 r1' r2',
-      r1 < n_hol -> r2 < n_hol -> r1' < n_hol -> r2' < n_hol -> 
+    forall r1 r2,
+      r1 < n_hol ->
+      r2 < n_hol -> 
+    let n_bound := bound_rvars_at_hole_scope Et in
     wf_EC_term m n m_hol n_hol G_hol 
-        (lctxt_rename (cut_renaming 0 r1 r2 r1' r2') D_hol) 
-        (tuple_cut_hole_scope Et r1 r2 r1' r2').
+        (lctxt_rename (rename_var n_hol n_bound r1 r2) D_hol) 
+        (rename_at_hole_scope n_bound r1 r2 Et).
 Proof.
   intros. inversion H; existT_eq; subst.
-  unfold tuple_cut_hole_scope, mutate_under_hole_scope.
-  rewrite (cut_renaming_indep 0 n_hol).
+  unfold rename_at_hole_scope, mutate_under_hole_scope.
+  unfold bound_rvars_at_hole_scope, apply_at_hole_scope, hole_scope in n_bound.
+  rewrite (rename_var_indep _ n_bound n_hol).
   destruct (inv_split_hole_scope (Ebag m0 n0 EP)); dest_conj_disj_exist.
-  all: rewrite H4.
-  - apply inv_split_hole_scope_Ehol_hs in H4.
-    assert (H5 := H4).
-    eapply hole_scope_at_top_wf_simpl_proc in H4; eauto.
-    destruct H4; subst.
-    remember (cut_renaming (n0 + n) r1 r2 r1' r2') as R. (* For clarity *)
-    assert (wf_ren R). {subst; apply cut_renaming_wf; auto. }
+  all: unfold n_bound.
+  all: rewrite H2; simpl; intros.
+  - apply inv_split_hole_scope_Ehol_hs in H2.
+    assert (H3 := H2).
+    eapply hole_scope_at_top_wf_simpl_proc in H2; eauto.
+    destruct H2; subst.
+    remember (rename_var (n0 + n) n0 r1 r2) as R. (* For clarity *)
+    assert (wf_ren R). {subst; apply rename_var_wf; try lia; auto. }
     eapply wf_Ebag with (D := lctxt_rename R D); eauto.
     + admit.
     + rewrite <- (lctxt_rename_id (flat_ctxt 1 n)).

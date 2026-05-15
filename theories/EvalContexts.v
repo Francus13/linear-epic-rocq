@@ -172,6 +172,8 @@ Definition mutate_under_hole_scope (f : EC_proc -> EC_proc) (Et : EC_term) :=
   end.
 
 
+Definition bound_rvars_at_hole_scope :=
+  apply_at_hole_scope get_rvars_Et.
 
 (* Gives the number of fvars bound by the hole scope *)
 Definition bound_fvars_at_hole_scope : EC_term -> nat :=
