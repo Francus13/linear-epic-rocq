@@ -801,6 +801,11 @@ Proof.
     rewrite HD in H1; auto. unfold sum in H1; lia.
 Qed.
 
+Lemma max_rvar_hole_EC_wf_term : forall m n m_hol n_hol G_hol D_hol Et,
+  wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
+  forall r, r < n_hol -> D_hol r <= 2.
+Proof. apply max_rvar_hole_EC_wf. Qed.
+
 
 
 (* If a wf EC has hole scope = top scope,
