@@ -515,6 +515,31 @@ Qed.
 
 
 
+Lemma inv_hole_scope_at_top : 
+  forall (Et : EC_term),
+    is_hole_scope_at_top Et = true ->
+    split_hole_scope Et = (Et, Ehol).
+Proof.
+  intros. destruct (inv_split_hole_scope Et); dest_conj_disj_exist.
+  - rewrite H0. apply inv_split_hole_scope_Ehol_eq in H0. subst; reflexivity.
+  - apply inv_split_hole_scope_Edeflam in H0. rewrite H in H0. discriminate.
+Qed.
+
+
+
+Lemma inv_hole_scope_not_at_top : 
+  forall (Et : EC_term),
+    is_hole_scope_at_top Et = false ->
+    exists Et_top r Et_rest,
+    split_hole_scope Et = (Et_top, Edeflam r Et_rest).
+Proof.
+  intros. destruct (inv_split_hole_scope Et); dest_conj_disj_exist.
+  - apply inv_split_hole_scope_Ehol_hs in H0. rewrite H in H0. discriminate.
+  - rewrite H0. eauto.
+Qed.
+
+
+
 
 
 
@@ -837,6 +862,36 @@ Lemma hole_scope_at_top_wf_simpl_proc : forall m n m_hol n_hol G D G_hol D_hol E
   wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP -> is_hole_scope_at_top_proc EP = true ->
   m_hol = m  /\ n_hol = n.
 Proof. apply hole_scope_at_top_wf_simpl. Qed.
+
+
+
+(* n_hol and m_hol are greater or equal to the bound variables at hole scope *)
+Lemma wf_hs_vars_correct :
+    (forall m n m_hol n_hol G_hol D_hol Et,
+      wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
+        bound_fvars_at_hole_scope Et <= m_hol /\
+        bound_rvars_at_hole_scope Et <= n_hol)
+/\  (forall m n m_hol n_hol G D G_hol D_hol EP, 
+      wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP ->
+      (is_hole_scope_at_top_proc EP = true /\ m = m_hol /\ n = n_hol) \/
+      (forall m' n',
+        bound_fvars_at_hole_scope (Ebag m' n' EP) <= m_hol /\
+        bound_rvars_at_hole_scope (Ebag m' n' EP) <= n_hol)).
+Proof.
+  apply wf_EC_ind; intros.
+  - dest_conj_disj_exist; subst.
+    + unfold bound_fvars_at_hole_scope, bound_rvars_at_hole_scope, 
+        apply_at_hole_scope, hole_scope.
+      rewrite inv_hole_scope_at_top; auto. simpl; lia.
+    + apply H.
+  - auto.
+  - right; intros. unfold bound_fvars_at_hole_scope, bound_rvars_at_hole_scope, 
+        apply_at_hole_scope, hole_scope in *.
+    assert (is_hole_scope_at_top (Ebag m' n' (Edeflam r Et)) = false) by auto.
+    apply inv_hole_scope_not_at_top in H0; dest_conj_disj_exist. simpl.
+    rewrite H0 in *.
+ apply 
+Qed.
 
 
 

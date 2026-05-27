@@ -631,17 +631,15 @@ Qed. *)
 
 Lemma wf_prim_step_req :
   forall m n Et r1 r2,
-    let n_hol' := bound_rvars_at_hole_scope Et in
-    r1 < n_hol' \/ r2 < n_hol' ->
+    let n_bound := bound_rvars_at_hole_scope Et in
+    r1 < n_bound \/ r2 < n_bound ->
     wf_term m n (Et <=[ req r1 r2 ]) ->
-    wf_term m n ((rename_at_hole_scope n_hol' r1 r2 Et) <=[ nul ]).
+    wf_term m n ((rename_at_hole_scope n_bound r1 r2 Et) <=[ nul ]).
 Proof.
   intros. destr_inv_fill_wf H0.
   inversion H1; existT_eq; subst; rewrite_ctxt_equivs; clear H1.
   eapply fill_wf_pres_term; eauto. 
-  2: econstructor; reflexivity. 
-  repeat econstructor; auto.
-    unfold sum, one, ctxt_eq, delta; lia.
+  2: econstructor; reflexivity.
 
   eapply rem_hole_rvar_EC_wf in H2; try reflexivity; auto.
   - eapply fill_wf_pres_term; eauto. repeat econstructor; auto.
