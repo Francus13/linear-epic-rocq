@@ -515,6 +515,83 @@ Qed.
 
 
 
+(* Splitting a hole scope EP with an accumulated Edeflam
+    gives a predictable pair *)
+Lemma build_hole_scope_correct_Edeflam : 
+  forall EP r Et_acc Et_trav,
+    is_hole_scope_at_top_proc EP = true ->
+    split_hole_scope_builder EP (Edeflam r Et_acc) Et_trav = 
+        (Et_trav, (Edeflam r Et_acc) <=<[ EP ]p).
+Proof.
+  induction EP; simpl; intros.
+  - now rewrite shift_Ehol_fill_term.
+  - discriminate.
+  - rewrite (shift_Epar_fill_term _ _ EP). now apply IHEP.
+Qed.
+
+(* Splitting a hole scope EP with a non-Edeflam accumulator
+    gives a predictable pair *)
+Lemma build_hole_scope_correct_Ehol_Epar : 
+  forall EP EP_acc Et_trav,
+    is_hole_scope_at_top_proc EP = true ->
+    is_hole_scope_at_top_proc EP_acc = true ->
+    split_hole_scope_builder EP EP_acc Et_trav = 
+        (Et_trav <=<[ EP_acc ] <=<[ EP ], Ehol).
+Proof.
+  induction EP; simpl; intros.
+  - rewrite shift_Ehol_fill_term.
+    destruct EP_acc; simpl in H0; auto; discriminate.
+  - discriminate.
+  - rewrite IHEP; auto using meet_hole_scope_at_top_proc.
+    rewrite (shift_Epar_fill_term _ _ EP). 
+    now rewrite (commute_EC_fill_term _ EP_acc).
+Qed.
+
+(* Splitting a non-hole scope EP gives as the second element
+    an Edeflam whose body is the hole scope of the splitee *)
+Lemma build_not_hole_scope_ind_of_acc : 
+  forall EP,
+    is_hole_scope_at_top_proc EP = false ->
+    exists r, forall EP_acc Et_trav m n, exists Et_top,
+    split_hole_scope_builder EP EP_acc Et_trav = 
+        (Et_top, Edeflam r (hole_scope (Ebag m n EP))).
+Proof.
+  EP_ind_unsafe IH EP; simpl; intros.
+  - discriminate.
+  - destruct (is_hole_scope_at_top_proc EP) eqn:H3.
+    + unfold hole_scope; simpl.
+      repeat eexists; intros.
+      now repeat (rewrite build_hole_scope_correct_Edeflam; auto).
+    + specialize IH with EP; destruct IH; auto. 
+      exists x; intros.
+      destruct (H4 (Edeflam H (Ebag H1 H0 Ehol)) (Et_trav <=<[ EP_acc]) m n).
+      rewrite H5.
+      exists x0; f_equal; auto.
+      unfold hole_scope at 2; simpl.
+      destruct (H4 (Edeflam H (Ebag H1 H0 Ehol)) (Ebag m n Ehol) m n).
+      now erewrite H6.
+  - specialize IH with EP; destruct IH; auto. 
+    exists x; intros.
+    destruct (H0 (EP_acc <=<[ Epar Ehol H2 ]p) Et_trav m n).
+    erewrite H1.
+    exists x0; f_equal; auto.
+    unfold hole_scope at 2; simpl.
+    destruct (H0 (Epar Ehol H2) (Ebag m n Ehol) m n).
+    now erewrite H3.
+Qed.
+
+(* Useful tactic for rewriting with build_not_hole_scope_ind_of_acc *)
+Ltac rewrite_build_not_hole_scope_of_acc EP EP_acc Et_trav m n EP_ind :=
+  let r := fresh in let H := fresh in
+  destruct (build_not_hole_scope_ind_of_acc EP) as [r H]; auto;
+  try solve [let IH := fresh in 
+              generalize EP_ind; EP_ind_unsafe IH EP_ind; simpl; auto];
+  specialize H with EP_acc Et_trav m n; destruct H;
+  rewrite H.
+
+
+
+(* Splitting a hole scope gives a predictable pair *)
 Lemma inv_hole_scope_at_top : 
   forall (Et : EC_term),
     is_hole_scope_at_top Et = true ->
@@ -525,19 +602,80 @@ Proof.
   - apply inv_split_hole_scope_Edeflam in H0. rewrite H in H0. discriminate.
 Qed.
 
-
-
+(* Splitting a non-hole scope gives a predictable pair *)
 Lemma inv_hole_scope_not_at_top : 
   forall (Et : EC_term),
     is_hole_scope_at_top Et = false ->
-    exists Et_top r Et_rest,
-    split_hole_scope Et = (Et_top, Edeflam r Et_rest).
-Proof.
-  intros. destruct (inv_split_hole_scope Et); dest_conj_disj_exist.
-  - apply inv_split_hole_scope_Ehol_hs in H0. rewrite H in H0. discriminate.
-  - rewrite H0. eauto.
+    exists Et_top r,
+    split_hole_scope Et = (Et_top, Edeflam r (hole_scope Et)).
+Proof. 
+  intros; destruct Et; simpl.
+  destruct (build_not_hole_scope_ind_of_acc EP); eauto.
+  specialize H0 with Ehol (Ebag m n Ehol) m n; destruct H0; eauto.
 Qed.
 
+
+
+(* hole_scope disregards everything above an Edeflam *)
+Lemma hole_scope_of_fill_Edeflam : 
+  forall Et r Et', 
+    hole_scope (Et' <=<[ Edeflam r Et ]) = hole_scope Et.
+Proof.
+  enough ((forall EP m n r Et EP_acc Et_trav,
+          (let (_, e0) := split_hole_scope_builder
+                              (EP <=<[ Edeflam r Et ]p) EP_acc Et_trav in
+          match e0 with
+          | Edeflam _ Et_lam => Et_lam
+          | _ => Ebag m n (EP <=<[ Edeflam r Et ]p)
+          end) = hole_scope Et)).
+  1: intros; unfold hole_scope at 1; destruct Et'; simpl; auto.
+  EP_ind_unsafe IH EP; simpl; intros.
+  - destruct Et.
+    destruct (is_hole_scope_at_top_proc EP) eqn:H.
+    + unfold hole_scope; simpl. 
+      rewrite build_hole_scope_correct_Edeflam; auto.
+      rewrite build_hole_scope_correct_Ehol_Epar; auto.
+    + now rewrite_build_not_hole_scope_of_acc EP 
+              (Edeflam r (Ebag m0 n0 Ehol)) (Et_trav <=<[ EP_acc]) m0 n0 EP.
+  - rewrite <- (IH EP m n r Et (Edeflam H (Ebag H1 H0 Ehol)) 
+                              (Et_trav <=<[ EP_acc])); eauto.
+    now rewrite_build_not_hole_scope_of_acc (EP <=<[ Edeflam r Et ]p) 
+              (Edeflam H (Ebag H1 H0 Ehol)) (Et_trav <=<[ EP_acc]) m n EP.
+  - rewrite <- (IH EP m n r Et (EP_acc <=<[ Epar Ehol H2 ]p) 
+                              Et_trav); eauto.
+    now rewrite_build_not_hole_scope_of_acc (EP <=<[ Edeflam r Et ]p) 
+              (EP_acc <=<[ Epar Ehol H2 ]p) Et_trav m n EP.
+Qed.
+
+(* hole_scope disregards Epars not in the hole scope *)
+Lemma hole_scope_of_fill_Epar : 
+  forall Et EP P m n, 
+    is_hole_scope_at_top_proc EP = false ->
+    hole_scope (Et <=<[ Epar EP P ]) = hole_scope (Ebag m n EP).
+Proof.
+  enough (forall EP EP' P m1 n1 m2 n2 EP_acc Et_trav,
+          is_hole_scope_at_top_proc EP' = false ->
+          (let (_, e0) := split_hole_scope_builder
+                              (EP <=<[ Epar EP' P ]p) EP_acc Et_trav in
+          match e0 with
+          | Edeflam _ Et_lam => Et_lam
+          | _ => Ebag m1 n1 (EP <=<[ Epar EP' P]p)
+          end) = hole_scope (Ebag m2 n2 EP')).
+  1: intros; unfold hole_scope at 1; destruct Et; simpl; auto.
+  EP_ind_unsafe IH EP; simpl; intros.
+  - destruct (build_not_hole_scope_ind_of_acc EP'); auto.
+    specialize H0 with (EP_acc <=<[ Epar Ehol P ]p) Et_trav m2 n2;
+        destruct H0.
+    now rewrite H0.
+  - rewrite <- (IH EP EP' P m1 n1 m2 n2 (Edeflam H (Ebag H1 H0 Ehol))
+                    (Et_trav <=<[ EP_acc])); eauto.
+    now rewrite_build_not_hole_scope_of_acc (EP <=<[ Epar EP' P ]p) 
+              (Edeflam H (Ebag H1 H0 Ehol)) (Et_trav <=<[ EP_acc]) m1 n1 EP.
+  - rewrite <- (IH EP EP' P m1 n1 m2 n2 
+                    (EP_acc <=<[ Epar Ehol H2 ]p) Et_trav); eauto.
+    now rewrite_build_not_hole_scope_of_acc (EP <=<[ Epar EP' P ]p) 
+              (EP_acc <=<[ Epar Ehol H2 ]p) Et_trav m1 n1 EP.
+Qed.
 
 
 
@@ -877,20 +1015,35 @@ Lemma wf_hs_vars_correct :
       (forall m' n',
         bound_fvars_at_hole_scope (Ebag m' n' EP) <= m_hol /\
         bound_rvars_at_hole_scope (Ebag m' n' EP) <= n_hol)).
-Proof.
+Proof. 
+  unfold bound_fvars_at_hole_scope, bound_rvars_at_hole_scope, apply_at_hole_scope.
   apply wf_EC_ind; intros.
+  (* Ebag by IH *)
   - dest_conj_disj_exist; subst.
-    + unfold bound_fvars_at_hole_scope, bound_rvars_at_hole_scope, 
-        apply_at_hole_scope, hole_scope.
-      rewrite inv_hole_scope_at_top; auto. simpl; lia.
+    + unfold hole_scope. rewrite inv_hole_scope_at_top; auto. simpl; lia.
     + apply H.
+  (* Ehol by construction *)
   - auto.
-  - right; intros. unfold bound_fvars_at_hole_scope, bound_rvars_at_hole_scope, 
-        apply_at_hole_scope, hole_scope in *.
+  (* Edeflam by IH *)
+  - right; intros.
     assert (is_hole_scope_at_top (Ebag m' n' (Edeflam r Et)) = false) by auto.
-    apply inv_hole_scope_not_at_top in H0; dest_conj_disj_exist. simpl.
-    rewrite H0 in *.
- apply 
+    apply inv_hole_scope_not_at_top in H0; dest_conj_disj_exist.
+    assert ((Ebag m' n' (Edeflam r Et)) = (Ebag m' n' Ehol) <=<[ Edeflam r Et]) by auto.
+    rewrite H2. rewrite hole_scope_of_fill_Edeflam. auto.
+  (* Epar by IH and casing on hs at top *)
+  - destruct H.
+    + auto.
+    + right. intros; specialize H with m' n'.
+      unfold hole_scope in *.
+      destruct (is_hole_scope_at_top_proc EP) eqn:H0.
+      * rewrite inv_hole_scope_at_top in *; auto.
+      * assert (is_hole_scope_at_top (Ebag m' n' EP) = false) by auto;
+        assert (is_hole_scope_at_top (Ebag m' n' (Epar EP P)) = false) by auto.
+        apply inv_hole_scope_not_at_top in H1, H2; dest_conj_disj_exist.
+        rewrite H1, H2 in *; auto.
+        assert (Ebag m' n' (Epar EP P) = (Ebag m' n' Ehol) <=<[ Epar EP P ]) by auto.
+        rewrite H4.
+        erewrite hole_scope_of_fill_Epar; eauto.
 Qed.
 
 

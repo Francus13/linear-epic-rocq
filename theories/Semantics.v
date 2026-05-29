@@ -419,6 +419,16 @@ Inductive step : term -> term -> Prop :=
 
 
 
+
+(* t = \ 0 0. P | nul | nul
+  t = Et1 [ P | nul ]
+  t = Et2 [ P | nul ]
+  Et1 [ P | nul ] ==> Et1 [ P ]
+  Et2 [ P | nul ] ==> Et2 [ P ]
+  Need to case on nul in Et1 = nul in Et2
+ *)
+
+
 (* Preservation of functions for prim_step *)
 
 Ltac destr_inv_fill_wf H := apply inv_fill_wf in H;
@@ -574,7 +584,7 @@ Proof.
 Qed.
 
 
-(* 
+
 (* Doing a substitution preserves well-formedness *)
 Lemma tuple_cut_ren_EC_wf : 
   forall (m n m_hol n_hol:nat) (G_hol : lctxt m_hol) (D_hol : lctxt n_hol)
@@ -626,7 +636,7 @@ Proof.
       eapply hole_scope_at_top_wf_simpl; eauto.
     } subst.
     admit. (* Need the cut renaming to preserve wf *)
-Qed. *)
+Qed.
 
 
 Lemma wf_prim_step_req :
