@@ -548,6 +548,18 @@ Proof.
 Qed.
 
 
+Lemma sum_delta_comm_app_zero_l : forall n m x y c,
+  x < n -> 
+  @ctxt_app _ n m (n[x ↦ y] ⨥ c) (zero m) = (n + m)[x ↦ y] ⨥ (c ⊗ zero m).
+Proof.
+  intros. unfold delta, ctxt_app, sum.
+  apply functional_extensionality; intros.
+  destruct (lt_dec x0 n); destruct (lt_dec x n); destruct (lt_dec x (n + m));
+      destruct (Nat.eq_dec x x0); lia.
+Qed.
+
+
+
 Definition SUM {n} (l : list (lctxt n)) : lctxt n :=
   List.fold_right sum (zero n) l.
 

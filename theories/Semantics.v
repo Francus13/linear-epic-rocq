@@ -127,12 +127,12 @@ Proof.
       destruct (Nat.eq_dec r2 x); try lia.
 Qed.
 
-Lemma rename_var_commute_app :
+(* Lemma rename_var_commute_app :
   forall n n_free r1 r2 (D1 : lctxt n) (D2 : lctxt n_free),
     (* r1 < n + n_free ->
     r2 < n + n_free -> *)
-    @ctxt_app _ n n_free (lctxt_rename (rename_var n n r1 r2) D1) D2 
-      ≡[n + n_free] lctxt_rename (rename_var (n + n_free) n r1 r2) (D1 ⊗ D2).
+    lctxt_rename (rename_var (n + n_free) n r1 r2) (D1 ⊗ D2) ≡[n + n_free]
+      @ctxt_app _ n n_free (lctxt_rename (rename_var n n r1 r2) D1) D2.
 Proof.
   intros. unfold lctxt_rename.
   enough (forall i, 
@@ -147,14 +147,28 @@ Proof.
   { specialize H with (n + n_free); destruct H.
     assert (n + n_free - n = n_free) by lia; rewrite H1 in H0; clear H1.
     remember (lctxt_rename_id D2). unfold lctxt_rename in c. rewrite c in H0.
-    apply H0; lia. }
+    symmetry in H0. apply H0; lia. }
   induction i; try destruct IHi; simpl in *; split; intros.
   - unfold zero. rewrite app_flat. reflexivity.
   - assert (n = 0) by lia; rewrite H0; clear H0. simpl.
     rewrite ctxt_app_0_l. reflexivity.
-  - rewrite <- sum_app_zero. admit.
-  - admit.
-Admitted.
+  - rewrite <- sum_app_zero. rewrite H; try lia. 
+    (* Just need to show that delta sum zero is big delta *) admit.
+  - destruct n; simpl in *.
+    + repeat rewrite ctxt_app_0_l in *.
+      rewrite Nat.sub_0_r in H0.
+      rewrite H0; try lia.
+      unfold ren_id. unfold rename_var at 2.
+      destruct (lt_dec r1 0); destruct (lt_dec r2 0); now try lia.
+    + destruct (Nat.eq_dec i n); subst.
+      * rewrite Nat.sub_diag; simpl.
+        rewrite sum_delta_comm_app_zero_l; simpl.
+        2: unfold rename_var.
+        2: destruct (lt_dec r1 (S n)); destruct (Nat.eq_dec n r1);
+            destruct (lt_dec r2 (S n)); destruct (Nat.eq_dec r2 n); try lia.
+        rewrite H. reflexivity.
+        rewrite (rename_var_indep _ (S n) (S (n + n_free))).
+Admitted. *)
 
 
 (* We use n for the number of scoped rvar variables
@@ -586,7 +600,7 @@ Qed.
 
 
 (* Doing a substitution preserves well-formedness *)
-Lemma tuple_cut_ren_EC_wf : 
+(* Lemma tuple_cut_ren_EC_wf : 
   forall (m n m_hol n_hol:nat) (G_hol : lctxt m_hol) (D_hol : lctxt n_hol)
         (Et : EC_term),
     wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
@@ -636,7 +650,7 @@ Proof.
       eapply hole_scope_at_top_wf_simpl; eauto.
     } subst.
     admit. (* Need the cut renaming to preserve wf *)
-Qed.
+Qed. *)
 
 
 Lemma wf_prim_step_req :
@@ -648,14 +662,67 @@ Lemma wf_prim_step_req :
 Proof.
   intros. destr_inv_fill_wf H0.
   inversion H1; existT_eq; subst; rewrite_ctxt_equivs; clear H1.
-  eapply fill_wf_pres_term; eauto. 
+  eapply (fill_wf_pres_term m n m_hol n_hol); eauto. 
   2: econstructor; reflexivity.
+  unfold rename_at_hole_scope, mutate_under_hole_scope.
+  rewrite (rename_var_indep _ n_bound n_hol).
+  unfold n_bound, bound_rvars_at_hole_scope, apply_at_hole_scope, hole_scope in *;
+      clear n_bound.
+  destruct (inv_split_hole_scope Et).
+  - destruct H0; rewrite H0 in *.
+    apply inv_split_hole_scope_Ehol_hs in H0.
+    destruct Et; simpl in *.
+    inversion H2; existT_eq; subst.
+    assert (H3 := H0); eapply hole_scope_at_top_wf_simpl_proc in H3; eauto.
+    destruct H3; subst.
+    apply rename_rvar_pres_wf_EC_hs with 
+              (R := (rename_var (n0 + n) n0 r1 r2)) in WFP; auto.
+    2: apply rename_var_wf; lia.
 
-  eapply rem_hole_rvar_EC_wf in H2; try reflexivity; auto.
-  - eapply fill_wf_pres_term; eauto. repeat econstructor; auto.
-    unfold sum, one, ctxt_eq, delta; lia.
-  - apply max_rvar_hole_EC_wf_term with (r := r) in H3; auto.
-    unfold one, delta, sum in *; lia_destruct; lia_goal.
+
+
+
+    (* apply wf_Ebag in WFP after ctxt_app shift *)
+
+
+
+    eapply rem_hole_rvar_EC_wf.
+    
+    eapply wf_Ebag with (D := lctxt_rename (rename_var n0 n0 r1 r2) D); eauto.
+    + admit.
+    + rewrite lctxt_rename_sum in WFP.
+      repeat (rewrite lctxt_rename_one in WFP; auto).
+      assert (rename_var (n0 + n) n0 r1 r2 r1 = rename_var (n0 + n) n0 r1 r2 r2).
+      {
+        unfold rename_var.
+        destruct (lt_dec r1 n0); destruct (Nat.eq_dec r1 r1);
+          destruct (Nat.eq_dec r2 r1); destruct (lt_dec r2 n0); 
+          destruct (Nat.eq_dec r2 r2); try lia.
+      }
+      rewrite H1 in WFP; clear H1.
+      apply rem_hole_rvar_EC_wf with (D_hol' := zero (n0 + n))
+                      (r := (rename_var (n0 + n) n0 r1 r2 r2)) in WFP; auto.
+      shelve.
+      * unfold one. rewrite delta_sum. now rewrite sum_zero_l.
+      * unfold rename_var. 
+        destruct (lt_dec r1 n0); destruct (Nat.eq_dec r2 r1);
+            destruct (lt_dec r2 n0); destruct (Nat.eq_dec r2 r2); lia.
+      Unshelve.
+      destruct WFP.
+
+
+
+
+      unfold one in WFP.
+      unfold rename_var at 2 3 in WFP.
+      assert 
+      destruct (lt_dec r1 n0); destruct (Nat.eq_dec r1 r1);
+          destruct (Nat.eq_dec r2 r1); destruct (lt_dec r2 n0); 
+          destruct (Nat.eq_dec r2 r2); try lia.
+
+
+  - do 3 destruct H0; rewrite H0.
+
 Qed.
 
 
