@@ -1013,6 +1013,7 @@ Lemma wf_hs_vars_correct :
       wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP ->
       (is_hole_scope_at_top_proc EP = true /\ m = m_hol /\ n = n_hol) \/
       (forall m' n',
+        is_hole_scope_at_top_proc EP = false /\
         bound_fvars_at_hole_scope (Ebag m' n' EP) <= m_hol /\
         bound_rvars_at_hole_scope (Ebag m' n' EP) <= n_hol)).
 Proof. 
@@ -1036,14 +1037,25 @@ Proof.
     + right. intros; specialize H with m' n'.
       unfold hole_scope in *.
       destruct (is_hole_scope_at_top_proc EP) eqn:H0.
-      * rewrite inv_hole_scope_at_top in *; auto.
+      * destruct H; discriminate.
       * assert (is_hole_scope_at_top (Ebag m' n' EP) = false) by auto;
         assert (is_hole_scope_at_top (Ebag m' n' (Epar EP P)) = false) by auto.
         apply inv_hole_scope_not_at_top in H1, H2; dest_conj_disj_exist.
         rewrite H1, H2 in *; auto.
         assert (Ebag m' n' (Epar EP P) = (Ebag m' n' Ehol) <=<[ Epar EP P ]) by auto.
-        rewrite H4.
+        rewrite H5.
         erewrite hole_scope_of_fill_Epar; eauto.
+Qed.
+
+Lemma wf_hs_var_bounds_eq :
+  forall m n m_hol n_hol G D G_hol D_hol EP, 
+    wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP ->
+    is_hole_scope_at_top_proc EP = true ->
+      m = m_hol /\ n = n_hol.
+Proof. 
+  intros. apply wf_hs_vars_correct in H. 
+  destruct H; dest_conj_disj_exist; auto.
+  rewrite H0 in H. destruct (H 0 0); discriminate.
 Qed.
 
 

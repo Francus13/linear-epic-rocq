@@ -474,18 +474,21 @@ Lemma rem_hole_rvar_EC_wf :
       D_hol ≡[n_hol] D_hol' ⨥ n_hol[r ↦ 2] ->
       r < n_hol ->
       D_hol' r = 0 ->
-    (wf_EC_proc m n m_hol n_hol G D G_hol D_hol' EP)
-    \/
-    (n = n_hol /\ 
-    exists (D' : lctxt n),
-      D ≡[n] D' ⨥ n[r ↦ 2] /\
-    wf_EC_proc m n m_hol n_hol G D' G_hol D_hol' EP)).
+        (is_hole_scope_at_top_proc EP = false /\
+        wf_EC_proc m n m_hol n_hol G D G_hol D_hol' EP)
+      \/
+        (is_hole_scope_at_top_proc EP = true /\
+        exists (D' : lctxt n),
+          D ≡[n] D' ⨥ n[r ↦ 2] /\
+        wf_EC_proc m n m_hol n_hol G D' G_hol D_hol' EP)).
 Proof.
   apply wf_EC_ind; intros.
   (* Ebag *)
   - destruct (H r D_hol' H0 H1 H2); clear H. 
-    + econstructor; eauto.
-    + destruct H3 as (H3 & D' & H4 & H5); subst.
+    + destruct H3; econstructor; eauto.
+    + destruct H3 as (H3 & D' & H4 & H5).
+      assert (H6 := H5); apply wf_hs_var_bounds_eq in H5; auto.
+      destruct H5; subst.
       symmetry in H0; rewrite sum_commutative in H0.
       apply delta_sum_ctxt_eq_inv in H0. destruct H0 as (D0 & -> & H).
       apply sum_app_inv_ctxt in H4. 
@@ -501,13 +504,13 @@ Proof.
         all: rewrite <- H0 in UD; try lia; clear H0.
         all: destruct (UD H); unfold delta, zero, flat_ctxt in H0.
         all: destruct (lt_dec r n); destruct (Nat.eq_dec r x); lia.
-      * rewrite <- HD4. rewrite HD1 in H5.
+      * rewrite <- HD4. rewrite HD1 in H6.
         destruct HD2; destruct H; clear H.
         -- rewrite <- H0, sum_zero_r. assumption.
         -- destruct (Nat.eq_dec n' 0); subst.
            ++ simpl in *. rewrite Nat.add_0_r in *. 
            rewrite (ctxt_app_l D1 (D2 ⨥ D2r)).
-           rewrite (ctxt_app_l D1 D2) in H5. assumption.
+           rewrite (ctxt_app_l D1 D2) in H6. assumption.
            ++ assert (1 > 1).
               { rewrite <- H0 in HD4. unfold flat_ctxt, ctxt_eq in HD4.
                 rewrite <- (HD4 (r - n)) at 1; try lia.
@@ -519,12 +522,12 @@ Proof.
     + transitivity D_hol; auto.
     + constructor; auto; reflexivity.
   (* Elamdef *)
-  - left. constructor; auto. eapply H; eauto.
+  - left. split; auto. constructor; auto. eapply H; eauto.
   (* Epar *)
-  - destruct (H r D_hol'); auto.
-    + left. econstructor; eauto.
-    + right. destruct H3 as (H3 & D' & H4 & H5).
-      split; auto. exists (D' ⨥ D2); repeat split.
+  - destruct (H r D_hol'); auto; dest_conj_disj_exist.
+    + left; split; auto. econstructor; eauto.
+    + right; split; auto.
+      exists (x ⨥ D2); repeat split.
       * rewrite <- sum_assoc, (sum_commutative D2), sum_assoc. 
         rewrite HD; rewrite H4. reflexivity.
       * econstructor; eauto; reflexivity.
@@ -678,6 +681,7 @@ Proof.
     apply rename_rvar_pres_wf_EC_hs with 
               (R := (rename_var (n0 + n) n0 r1 r2)) in WFP; auto.
     2: apply rename_var_wf; lia.
+
 
 
 
