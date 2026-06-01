@@ -667,6 +667,9 @@ Proof.
   inversion H1; existT_eq; subst; rewrite_ctxt_equivs; clear H1.
   eapply (fill_wf_pres_term m n m_hol n_hol); eauto. 
   2: econstructor; reflexivity.
+
+  inversion H2; existT_eq; subst.
+
   unfold rename_at_hole_scope, mutate_under_hole_scope.
   rewrite (rename_var_indep _ n_bound n_hol).
   unfold n_bound, bound_rvars_at_hole_scope, apply_at_hole_scope, hole_scope in *;
@@ -686,11 +689,11 @@ Proof.
 
 
 
+
     (* apply wf_Ebag in WFP after ctxt_app shift *)
 
 
 
-    eapply rem_hole_rvar_EC_wf.
     
     eapply wf_Ebag with (D := lctxt_rename (rename_var n0 n0 r1 r2) D); eauto.
     + admit.
