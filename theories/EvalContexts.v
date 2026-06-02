@@ -689,6 +689,17 @@ Qed.
 
 
 
+(* EC Renaming preserves hole-scopedness *)
+Lemma ren_pres_hs_proc :
+  forall EP n n' (R : ren n n'),
+    is_hole_scope_at_top_proc (rename_rvar_EC_proc R EP) =
+        is_hole_scope_at_top_proc EP.
+Proof.
+  induction EP; simpl; intros; auto.
+Qed.
+
+
+
 
 
 
@@ -1188,13 +1199,16 @@ Qed.
 Definition wf_hs_ren {n_hol} n (r : ren n_hol n_hol) :=
   wf_ren r /\
   forall n' m G (D : lctxt n) G_hol D_hol EP,
+    (forall x : nat, x < n -> D x = 2 \/ D x = 0) ->
     n_hol = n + n' ->
     wf_EC_proc m (n + n') m (n + n') 
-        G (D ⊗ flat_ctxt 1 n') G_hol D_hol EP ->
+        G (lctxt_rename r (@ctxt_app _ n n' D (flat_ctxt 1 n'))) 
+        G_hol (lctxt_rename r D_hol) (rename_rvar_EC_proc r EP) ->
     exists D',
-    wf_EC_proc m (n + n') m (n + n') 
-        G (D' ⊗ flat_ctxt 1 n') G_hol (lctxt_rename r D_hol) 
-        (rename_rvar_EC_proc r EP).
+      (forall x : nat, x < n -> D' x = 2 \/ D' x = 0) /\
+      wf_EC_proc m (n + n') m (n + n') 
+          G (D' ⊗ flat_ctxt 1 n') G_hol (lctxt_rename r D_hol) 
+          (rename_rvar_EC_proc r EP).
 
 
 
@@ -1212,13 +1226,14 @@ Lemma rename_rvar_pres_wf_EC :
       wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP ->
     forall (R : ren n_hol n_hol),
       (is_hole_scope_at_top_proc EP = true /\
-      wf_EC_proc m n m_hol n_hol G (lctxt_rename R D)
-          G_hol (lctxt_rename R D_hol) (rename_rvar_EC_proc R EP))
-  \/  (wf_hs_ren (bound_rvars_at_hole_scope (Ebag 0 0 EP)) R ->
-      is_hole_scope_at_top_proc EP = false /\
-      wf_EC_proc m n m_hol n_hol G D
-          G_hol (lctxt_rename R D_hol) 
-          (mutate_under_hole_scope_proc (rename_rvar_EC_proc R) EP))).
+      (wf_ren R ->
+        wf_EC_proc m n m_hol n_hol G (lctxt_rename R D)
+            G_hol (lctxt_rename R D_hol) (rename_rvar_EC_proc R EP)))
+  \/  (is_hole_scope_at_top_proc EP = false /\
+      (wf_hs_ren (bound_rvars_at_hole_scope (Ebag 0 0 EP)) R ->
+        wf_EC_proc m n m_hol n_hol G D
+            G_hol (lctxt_rename R D_hol) 
+            (mutate_under_hole_scope_proc (rename_rvar_EC_proc R) EP)))).
 Proof.
   apply wf_EC_ind; simpl; intros.
   - assert (forall f, mutate_under_hole_scope f (Ebag m n EP) = 
@@ -1233,15 +1248,48 @@ Proof.
     }
     rewrite H1; clear H1.
     specialize H with R; dest_conj_disj_exist; auto.
-    + admit.
-    + econstructor; eauto. (* Prove that the bounds don't matter *)
-  (* EP_ind_unsafe IH EP; simpl; intros. *)
+    + destruct H0. 
+      apply H1 in H0; clear H1. 
+      assert (H1 := H0); apply wf_hs_var_bounds_eq_proc in H1.
+      2: rewrite ren_pres_hs_proc; auto.
+      destruct H1; subst.
+      assert (bound_rvars_at_hole_scope (Ebag m n EP) = n).
+      { 
+        unfold bound_rvars_at_hole_scope, apply_at_hole_scope, hole_scope.
+        rewrite inv_hole_scope_at_top; auto.
+      }
+      rewrite H1 in H2; clear H1.
+      assert (n + n' = n + n') by auto.
+      eapply H2 in H1; eauto.
+      dest_conj_disj_exist.
+      eapply wf_Ebag with (D := x); eauto.
+      unfold mutate_under_hole_scope_proc, mutate_under_hole_scope.
+      rewrite inv_hole_scope_at_top; auto.
+    + econstructor; eauto.
+      assert (bound_rvars_at_hole_scope (Ebag 0 0 EP) =
+                bound_rvars_at_hole_scope (Ebag m n EP)).
+      {
+        unfold bound_rvars_at_hole_scope, apply_at_hole_scope, hole_scope; simpl.
+        remember (build_not_hs_correct EP H); clear Heqe.
+        dest_conj_disj_exist.
+        now repeat rewrite H4.
+      }
+      rewrite H2 in H1; auto.
   (* Ehol by context rewriting *)
   - left; split; auto.
     econstructor; eauto.
     now apply lctxt_rename_ctxt_eq.
   (* Edeflam by IH, which needs massaging *)
-  - right; split; auto. apply H in HWF; clear H.
+  - right; split; auto; intros.
+    assert (bound_rvars_at_hole_scope Et =
+              bound_rvars_at_hole_scope (Ebag 0 0 (Edeflam r Et))).
+    {
+      unfold bound_rvars_at_hole_scope, apply_at_hole_scope.
+      assert (Ebag 0 0 (Edeflam r Et) = (Ebag 0 0 Ehol) <=<[ Edeflam r Et ]) by auto.
+      rewrite H1. now rewrite hole_scope_of_fill_Edeflam.
+    }
+    rewrite H1 in H; clear H1.
+    apply H in H0; clear H.
     assert (forall f, mutate_under_hole_scope_proc f (Edeflam r Et) = 
               Edeflam r (mutate_under_hole_scope f Et)).
     {
@@ -1251,13 +1299,13 @@ Proof.
       - rewrite build_hs_correct_Edeflam; simpl; auto.
         rewrite build_hs_correct_Ehol_Epar; auto.
       - apply build_not_hs_correct in H; dest_conj_disj_exist.
-        repeat rewrite H1; simpl. destruct x0. auto.
+        repeat rewrite H2; simpl. destruct x0. auto.
     }
-    rewrite H.
+    rewrite H; clear H.
     econstructor; eauto.
   (* Epar is by IH, context rewriting,
       and process renaming preservation *)
-  - destruct (H R HWF); clear H; dest_conj_disj_exist.
+  - specialize H with R; dest_conj_disj_exist.
     + left; split; auto.
       apply wf_hs_var_bounds_eq in WFP1; auto.
       destruct WFP1; subst.
@@ -1265,7 +1313,16 @@ Proof.
       * apply rename_rvar_pres_wf; eauto.
       * rewrite lctxt_rename_ctxt_eq; eauto.
         now rewrite lctxt_rename_sum.
-    + right; split; auto. 
+    + right; split; auto; intros.
+      assert (bound_rvars_at_hole_scope (Ebag 0 0 (Epar EP P)) =
+                bound_rvars_at_hole_scope (Ebag 0 0 EP)).
+      {
+        unfold bound_rvars_at_hole_scope, apply_at_hole_scope.
+        assert (Ebag 0 0 (Epar EP P) = (Ebag 0 0 Ehol) <=<[ Epar EP P ]) by auto.
+        rewrite H2. now erewrite hole_scope_of_fill_Epar.
+      }
+      rewrite H2 in H1; clear H2.
+      apply H0 in H1; clear H0.
       unfold mutate_under_hole_scope_proc, mutate_under_hole_scope in *; 
           simpl in *.
       apply build_not_hs_correct in H; dest_conj_disj_exist.
