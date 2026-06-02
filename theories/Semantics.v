@@ -371,7 +371,6 @@ Inductive prim_step : term -> term -> Prop :=
       (Et <=[ par (def r (tup r1 r2)) (def r (tup r1' r2')) ])
       (Et <=[ par (req r1 r1') (req r2 r2') ])
       
-(* TODO update with req for arg *)
 | step_app_same_scope :    (*  Et <=[ rf <- lam r'. t | rf <- ?f | f r ]  *)
   forall Et t f rf r,    (*  -->  Et <=[ '' | '' | fresh_body(t){r=r'} ]  *)
       (* Get the freshened and applied body *)
@@ -452,86 +451,6 @@ Ltac rewrite_ctxt_equivs :=
 repeat match goal with
 | H : ?C1 ≡[ ?n ] ?C2 |- _ => rewrite H in *; clear H
 end.
-
-
-
-(* Removing a resource requirement from the hole (changing 2 uses to 0 uses) 
-   preserves EC well-formedness *)
-Lemma rem_hole_rvar_EC_wf : 
-  (forall (m n m_hol n_hol:nat) (G_hol : lctxt m_hol) (D_hol : lctxt n_hol)
-        (Et : EC_term),
-    wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
-    forall (r : rvar) (D_hol' : lctxt n_hol),
-      D_hol ≡[n_hol] D_hol' ⨥ n_hol[r ↦ 2] ->
-      r < n_hol ->
-      D_hol' r = 0 ->
-    wf_EC_term m n m_hol n_hol G_hol D_hol' Et)
-  /\  
-  (forall (m n m_hol n_hol:nat) (G : lctxt m) (D : lctxt n)
-        (G_hol : lctxt m_hol) (D_hol : lctxt n_hol) (EP : EC_proc), 
-    wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP ->
-    forall (r : rvar) (D_hol' : lctxt n_hol),
-      D_hol ≡[n_hol] D_hol' ⨥ n_hol[r ↦ 2] ->
-      r < n_hol ->
-      D_hol' r = 0 ->
-        (is_hole_scope_at_top_proc EP = false /\
-        wf_EC_proc m n m_hol n_hol G D G_hol D_hol' EP)
-      \/
-        (is_hole_scope_at_top_proc EP = true /\
-        exists (D' : lctxt n),
-          D ≡[n] D' ⨥ n[r ↦ 2] /\
-        wf_EC_proc m n m_hol n_hol G D' G_hol D_hol' EP)).
-Proof.
-  apply wf_EC_ind; intros.
-  (* Ebag *)
-  - destruct (H r D_hol' H0 H1 H2); clear H. 
-    + destruct H3; econstructor; eauto.
-    + destruct H3 as (H3 & D' & H4 & H5).
-      assert (H6 := H5); apply wf_hs_var_bounds_eq in H5; auto.
-      destruct H5; subst.
-      symmetry in H0; rewrite sum_commutative in H0.
-      apply delta_sum_ctxt_eq_inv in H0. destruct H0 as (D0 & -> & H).
-      apply sum_app_inv_ctxt in H4. 
-      destruct H4 as (D1 & D1r & D2 & D2r & HD1 & HD2 & HD3 & HD4).
-      rewrite H, <- HD3 in WFP; clear H.
-      apply delta_ctxt_eq_app_inv in HD2. 
-      apply wf_Ebag with (G := G) (D := D1); auto; subst.
-      * intros. unfold ctxt_eq in HD3; specialize HD3 with x.
-        rewrite sum_correct in HD3. 
-        specialize UD with x. rewrite <- HD3 in UD; auto.
-        destruct HD2; destruct H0; clear H3.
-        all: unfold ctxt_eq in H0; specialize H0 with x.
-        all: rewrite <- H0 in UD; try lia; clear H0.
-        all: destruct (UD H); unfold delta, zero, flat_ctxt in H0.
-        all: destruct (lt_dec r n); destruct (Nat.eq_dec r x); lia.
-      * rewrite <- HD4. rewrite HD1 in H6.
-        destruct HD2; destruct H; clear H.
-        -- rewrite <- H0, sum_zero_r. assumption.
-        -- destruct (Nat.eq_dec n' 0); subst.
-           ++ simpl in *. rewrite Nat.add_0_r in *. 
-           rewrite (ctxt_app_l D1 (D2 ⨥ D2r)).
-           rewrite (ctxt_app_l D1 D2) in H6. assumption.
-           ++ assert (1 > 1).
-              { rewrite <- H0 in HD4. unfold flat_ctxt, ctxt_eq in HD4.
-                rewrite <- (HD4 (r - n)) at 1; try lia.
-                unfold delta, sum. 
-                destruct (lt_dec (r - n) n'); destruct (Nat.eq_dec (r - n) (r - n)); lia. }
-              lia.
-  (* Ehol *)
-  - right; split; auto. exists D_hol'; repeat split; auto.
-    + transitivity D_hol; auto.
-    + constructor; auto; reflexivity.
-  (* Elamdef *)
-  - left. split; auto. constructor; auto. eapply H; eauto.
-  (* Epar *)
-  - destruct (H r D_hol'); auto; dest_conj_disj_exist.
-    + left; split; auto. econstructor; eauto.
-    + right; split; auto.
-      exists (x ⨥ D2); repeat split.
-      * rewrite <- sum_assoc, (sum_commutative D2), sum_assoc. 
-        rewrite HD; rewrite H4. reflexivity.
-      * econstructor; eauto; reflexivity.
-Qed.
 
 
 
@@ -624,7 +543,7 @@ Proof.
   all: rewrite H2; simpl; intros.
   - apply inv_split_hole_scope_Ehol_hs in H2.
     assert (H3 := H2).
-    eapply hole_scope_at_top_wf_simpl_proc in H2; eauto.
+    eapply wf_hs_var_bounds_eq_proc in H2; eauto.
     destruct H2; subst.
     remember (rename_var (n0 + n) n0 r1 r2) as R. (* For clarity *)
     assert (wf_ren R). {subst; apply rename_var_wf; try lia; auto. }
@@ -650,7 +569,7 @@ Proof.
     (* Need to know n_hol = n1 + 1 *)
     apply split_hole_scope_gives_hole_scope in H6.
     assert (n_hol = n1 + 1). {
-      eapply hole_scope_at_top_wf_simpl; eauto.
+      eapply wf_hs_var_bounds_eq; eauto.
     } subst.
     admit. (* Need the cut renaming to preserve wf *)
 Qed. *)
@@ -679,7 +598,7 @@ Proof.
     apply inv_split_hole_scope_Ehol_hs in H0.
     destruct Et; simpl in *.
     inversion H2; existT_eq; subst.
-    assert (H3 := H0); eapply hole_scope_at_top_wf_simpl_proc in H3; eauto.
+    assert (H3 := H0); eapply wf_hs_var_bounds_eq_proc in H3; eauto.
     destruct H3; subst.
     apply rename_rvar_pres_wf_EC_hs with 
               (R := (rename_var (n0 + n) n0 r1 r2)) in WFP; auto.
