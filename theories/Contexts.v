@@ -974,26 +974,6 @@ Definition lctxt_rename {n m} (r : ren n m) (c : lctxt n) : lctxt m :=
 
 
 
-Lemma lctxt_rename_id : forall n (c : lctxt n),
-  lctxt_rename (ren_id n) c ≡[n] c.
-Proof.
-  unfold lctxt_rename, ctxt_eq; intros.
-  enough (forall i, (x < i -> lctxt_rename_helper i (ren_id n) c x = c x)
-                /\  (x >= i -> lctxt_rename_helper i (ren_id n) c x = 0)).
-  1: destruct (H0 n); auto.
-  induction i; simpl; intros; split; intros; try destruct IHi.
-  - lia.
-  - unfold zero; auto.
-  - destruct (Nat.eq_dec x i); subst.
-    + admit.
-    + admit.
-  - rewrite sum_correct. rewrite H2; try lia. unfold ren_id; simpl.
-
-  unfold sum, delta.
-  rewrite IHi.
-  destruct (lt_dec (r i) m); destruct (Nat.eq_dec (r i) x); lia.
-Qed.
-
 Lemma lctxt_rename_oob : forall {n m} (r : ren n m) (c : lctxt n) x,
   ~(x < m) ->
   lctxt_rename r c x = 0.

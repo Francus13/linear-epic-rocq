@@ -115,88 +115,6 @@ Lemma rename_var_indep :
   forall n n1 n2, rename_var n1 n = rename_var n2 n.
 Proof. unfold rename_var; reflexivity. Qed.
 
-(* Lemma rename_var_wf_hs_ren :
-  forall n n_free r1 r2,
-    r1 < (n + n_free) ->
-    r2 < (n + n_free) ->
-    wf_hs_ren n (rename_var (n + n_free) n r1 r2).
-Proof.
-  unfold wf_hs_ren, wf_ren; intros; split; intros.
-  - unfold rename_var.
-    destruct (lt_dec r1 n); destruct (lt_dec r2 n); 
-        destruct (Nat.eq_dec x r1); destruct (Nat.eq_dec r2 x); lia.
-  - assert (n' = n_free) by lia; subst; clear H2.
-    assert (lctxt_rename (rename_var (n + n_free) n r1 r2) (D ⊗ flat_ctxt 1 n_free)
-                ≡[n + n_free] D ⊗ flat_ctxt 1 n_free
-        \/  exists D0,
-            D ≡[n] D0 ⨥ n[r1 ↦ 2] /\
-            lctxt_rename (rename_var (n + n_free) n r1 r2) (D ⊗ flat_ctxt 1 n_free)
-                ≡[n + n_free] (D0 ⊗ flat_ctxt 1 n_free) ⨥ (n + n_free)[r2 ↦ 2]
-        \/  exists D0,
-            D ≡[n] D0 ⨥ n[r2 ↦ 2] /\
-            lctxt_rename (rename_var (n + n_free) n r1 r2) (D ⊗ flat_ctxt 1 n_free)
-                ≡[n + n_free] (D0 ⊗ flat_ctxt 1 n_free) ⨥ (n + n_free)[r1 ↦ 2]).
-    {
-      clear H3. unfold rename_var.
-      destruct (lt_dec r1 n).
-      - admit.
-      - destruct (lt_dec r2 n).
-        + admit.
-        + left. 
-          assert ((fun z : var => z) = ren_id (n + n_free)) by auto; rewrite H2.
-          rewrite lctxt_rename_id; reflexivity.
-    }
-
-
-
-  apply functional_extensionality; intros. 
-  destruct (lt_dec r1 n); destruct (lt_dec x n);
-      destruct (Nat.eq_dec x r1); destruct (lt_dec r2 n);
-      destruct (Nat.eq_dec r2 x); try lia.
-Qed. *)
-
-(* Lemma rename_var_wf_hs_ren :
-  forall n n_free r1 r2 (D1 : lctxt n) (D2 : lctxt n_free),
-    (* r1 < n + n_free ->
-    r2 < n + n_free -> *)
-    lctxt_rename (rename_var (n + n_free) n r1 r2) (D1 ⊗ D2) ≡[n + n_free]
-      @ctxt_app _ n n_free (lctxt_rename (rename_var n n r1 r2) D1) D2.
-Proof.
-  intros. unfold lctxt_rename.
-  enough (forall i, 
-    (i < n ->
-      @ctxt_app _ n n_free (lctxt_rename_helper i (rename_var n n r1 r2) D1) 
-                        (lctxt_rename_helper 0 (ren_id n_free) D2) ≡[n + n_free]
-      lctxt_rename_helper i (rename_var (n + n_free) n r1 r2) (D1 ⊗ D2))
-/\  (~(i < n) ->
-      @ctxt_app _ n n_free (lctxt_rename_helper n (rename_var n n r1 r2) D1)
-                        (lctxt_rename_helper (i - n) (ren_id n_free) D2) ≡[n + n_free]
-      lctxt_rename_helper i (rename_var (n + n_free) n r1 r2) (D1 ⊗ D2))).
-  { specialize H with (n + n_free); destruct H.
-    assert (n + n_free - n = n_free) by lia; rewrite H1 in H0; clear H1.
-    remember (lctxt_rename_id D2). unfold lctxt_rename in c. rewrite c in H0.
-    symmetry in H0. apply H0; lia. }
-  induction i; try destruct IHi; simpl in *; split; intros.
-  - unfold zero. rewrite app_flat. reflexivity.
-  - assert (n = 0) by lia; rewrite H0; clear H0. simpl.
-    rewrite ctxt_app_0_l. reflexivity.
-  - rewrite <- sum_app_zero. rewrite H; try lia. 
-    (* Just need to show that delta sum zero is big delta *) admit.
-  - destruct n; simpl in *.
-    + repeat rewrite ctxt_app_0_l in *.
-      rewrite Nat.sub_0_r in H0.
-      rewrite H0; try lia.
-      unfold ren_id. unfold rename_var at 2.
-      destruct (lt_dec r1 0); destruct (lt_dec r2 0); now try lia.
-    + destruct (Nat.eq_dec i n); subst.
-      * rewrite Nat.sub_diag; simpl.
-        rewrite sum_delta_comm_app_zero_l; simpl.
-        2: unfold rename_var.
-        2: destruct (lt_dec r1 (S n)); destruct (Nat.eq_dec n r1);
-            destruct (lt_dec r2 (S n)); destruct (Nat.eq_dec r2 n); try lia.
-        rewrite H. reflexivity.
-        rewrite (rename_var_indep _ (S n) (S (n + n_free))).
-Admitted. *)
 
 
 (* We use n for the number of scoped rvar variables
@@ -642,6 +560,55 @@ Proof.
         destruct (Nat.eq_dec r2 r2); try lia.
     }
     rewrite H3 in H1; clear H3.
+    unfold one in H1. rewrite delta_sum in H1; simpl in H1.
+    destruct WFR. apply H1 in H3; clear H1.
+
+
+
+
+
+
+  unfold wf_hs_ren, wf_ren; intros; split; intros.
+  - unfold rename_var.
+    destruct (lt_dec r1 n); destruct (lt_dec r2 n); 
+        destruct (Nat.eq_dec x r1); destruct (Nat.eq_dec r2 x); lia.
+  - assert (n' = n_free) by lia; subst; clear H2.
+    assert (lctxt_rename (rename_var (n + n_free) n r1 r2) (D ⊗ flat_ctxt 1 n_free)
+                ≡[n + n_free] D ⊗ flat_ctxt 1 n_free
+        \/  exists D0,
+            D ≡[n] D0 ⨥ n[r1 ↦ 2] /\
+            lctxt_rename (rename_var (n + n_free) n r1 r2) (D ⊗ flat_ctxt 1 n_free)
+                ≡[n + n_free] (D0 ⊗ flat_ctxt 1 n_free) ⨥ (n + n_free)[r2 ↦ 2]
+        \/  exists D0,
+            D ≡[n] D0 ⨥ n[r2 ↦ 2] /\
+            lctxt_rename (rename_var (n + n_free) n r1 r2) (D ⊗ flat_ctxt 1 n_free)
+                ≡[n + n_free] (D0 ⊗ flat_ctxt 1 n_free) ⨥ (n + n_free)[r1 ↦ 2]).
+    {
+      clear H3. unfold rename_var.
+      destruct (lt_dec r1 n).
+      - admit.
+      - destruct (lt_dec r2 n).
+        + admit.
+        + left. 
+          assert ((fun z : var => z) = ren_id (n + n_free)) by auto; rewrite H2.
+          rewrite lctxt_rename_id; reflexivity.
+    }
+    dest_conj_disj_exist.
+    + exists D. rewrite H2 in H3. auto.
+    + exists x. rewrite H4 in H3.
+
+
+
+
+
+
+
+
+
+
+
+
+
     apply rem_hole_rvar_EC_wf with (D_hol' := zero (n0 + n))
                     (r := (rename_var (n0 + n) n0 r1 r2 r2)) in H1; auto.
     shelve.

@@ -1194,45 +1194,46 @@ Qed.
 
 
 
+Definition ctxt_eq_or_rem_2 n (c1 : lctxt n) (c2 : lctxt n) r :=
+  c1 ≡[n] c2 \/ c1 ≡[n] n[r ↦ 2] ⨥ c2.
 
 
-Definition wf_hs_ren {n_hol} n (r : ren n_hol n_hol) :=
-  wf_ren r /\
-  forall n' m G (D : lctxt n) G_hol D_hol EP,
+(* REWORK TODO *)
+Definition wf_hs_ren {n_hol} n (R : ren n_hol n_hol) D_hol D_hol' :=
+  wf_ren R /\
+  forall n' m G (D : lctxt n) G_hol EP,
     (forall x : nat, x < n -> D x = 2 \/ D x = 0) ->
     n_hol = n + n' ->
     wf_EC_proc m (n + n') m (n + n') 
-        G (lctxt_rename r (@ctxt_app _ n n' D (flat_ctxt 1 n'))) 
-        G_hol (lctxt_rename r D_hol) (rename_rvar_EC_proc r EP) ->
+        G (lctxt_rename R (@ctxt_app _ n n' D (flat_ctxt 1 n'))) 
+        G_hol D_hol (rename_rvar_EC_proc R EP) ->
     exists (D' : lctxt n),
       (forall x : nat, x < n -> D' x = 2 \/ D' x = 0) /\
       wf_EC_proc m (n + n') m (n + n') 
-          G (D' ⊗ flat_ctxt 1 n') G_hol (lctxt_rename r D_hol) 
-          (rename_rvar_EC_proc r EP).
+          G (D' ⊗ flat_ctxt 1 n') G_hol D_hol'
+          (rename_rvar_EC_proc R EP).
 
 
 
-(* EC Renaming preserves well-formedness *)
+(* EC renaming preserves well-formedness *)
 Lemma rename_rvar_pres_wf_EC :
     (forall m n m_hol n_hol G_hol D_hol Et,
       wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
     let n' := bound_rvars_at_hole_scope Et in
-    forall (R : ren n_hol n_hol),
-      wf_hs_ren (bound_rvars_at_hole_scope Et) R ->
-      wf_EC_term m n m_hol n_hol
-          G_hol (lctxt_rename R D_hol) 
+    forall (R : ren n_hol n_hol) D_hol',
+      wf_hs_ren (bound_rvars_at_hole_scope Et) R D_hol D_hol' ->
+      wf_EC_term m n m_hol n_hol G_hol D_hol'
           (mutate_under_hole_scope (rename_rvar_EC_proc R) Et))
 /\  (forall m n m_hol n_hol G D G_hol D_hol EP,
       wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP ->
-    forall (R : ren n_hol n_hol),
+    forall (R : ren n_hol n_hol) D_hol',
       (is_hole_scope_at_top_proc EP = true /\
       (wf_ren R ->
         wf_EC_proc m n m_hol n_hol G (lctxt_rename R D)
-            G_hol (lctxt_rename R D_hol) (rename_rvar_EC_proc R EP)))
+            G_hol D_hol' (rename_rvar_EC_proc R EP)))
   \/  (is_hole_scope_at_top_proc EP = false /\
-      (wf_hs_ren (bound_rvars_at_hole_scope (Ebag 0 0 EP)) R ->
-        wf_EC_proc m n m_hol n_hol G D
-            G_hol (lctxt_rename R D_hol) 
+      (wf_hs_ren (bound_rvars_at_hole_scope (Ebag 0 0 EP)) R D_hol D_hol' ->
+        wf_EC_proc m n m_hol n_hol G D G_hol D_hol'
             (mutate_under_hole_scope_proc (rename_rvar_EC_proc R) EP)))).
 Proof.
   apply wf_EC_ind; simpl; intros.
@@ -1248,8 +1249,7 @@ Proof.
     }
     rewrite H1; clear H1.
     specialize H with R; dest_conj_disj_exist; auto.
-    + destruct H0. 
-      apply H1 in H0; clear H1. 
+    + destruct H0. apply H1 in H0; clear H1. 
       assert (H1 := H0); apply wf_hs_var_bounds_eq_proc in H1.
       2: rewrite ren_pres_hs_proc; auto.
       destruct H1; subst.
