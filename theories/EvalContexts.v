@@ -1204,7 +1204,7 @@ Definition wf_hs_ren {n_hol} n (r : ren n_hol n_hol) :=
     wf_EC_proc m (n + n') m (n + n') 
         G (lctxt_rename r (@ctxt_app _ n n' D (flat_ctxt 1 n'))) 
         G_hol (lctxt_rename r D_hol) (rename_rvar_EC_proc r EP) ->
-    exists D',
+    exists (D' : lctxt n),
       (forall x : nat, x < n -> D' x = 2 \/ D' x = 0) /\
       wf_EC_proc m (n + n') m (n + n') 
           G (D' ⊗ flat_ctxt 1 n') G_hol (lctxt_rename r D_hol) 
