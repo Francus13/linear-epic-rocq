@@ -1198,18 +1198,36 @@ Definition ctxt_eq_or_rem_2 n (c1 : lctxt n) (c2 : lctxt n) r :=
   c1 ≡[n] c2 \/ c1 ≡[n] n[r ↦ 2] ⨥ c2.
 
 
-(* REWORK TODO *)
-Definition wf_hs_ren {n_hol} n (R : ren n_hol n_hol) D_hol D_hol' :=
+
+(*
+
+wf n_free (Ebag m n EP)
+--> wf (D x (flat_ctxt 1 n_free)) EP
+      where (forall x : nat, x < n -> D x = 2 \/ D x = 0)
+--> wf (lctxt_renmae R (D x (flat_ctxt 1 n_free))) (rename R EP)
+wtp 
+    exists D', wf (D' x (flat_ctxt 1 n_free)) (rename R EP)
+      where (forall x : nat, x < n -> D' x = 2 \/ D' x = 0)
+
+*)
+
+
+
+Definition wf_hs_ren {n_hol} n (R : ren n_hol n_hol) :=
   wf_ren R /\
-  forall n' m G (D : lctxt n) G_hol EP,
-    (forall x : nat, x < n -> D x = 2 \/ D x = 0) ->
+  forall n' m G (D : lctxt n) G_hol D_hol EP,
     n_hol = n + n' ->
-    wf_EC_proc m (n + n') m (n + n') 
+    (forall x : nat, x < n -> D x = 2 \/ D x = 0) ->
+    wf_EC_proc m (n + n') m (n + n')
         G (lctxt_rename R (@ctxt_app _ n n' D (flat_ctxt 1 n'))) 
         G_hol D_hol (rename_rvar_EC_proc R EP) ->
-    exists (D' : lctxt n),
-      (forall x : nat, x < n -> D' x = 2 \/ D' x = 0) /\
-      wf_EC_proc m (n + n') m (n + n') 
+    exists D' D_hol',
+        (forall x : nat, x < n -> D' x = 2 \/ D' x = 0)
+    /\  ((D ≡[n] D' /\ D_hol ≡[n_hol] D_hol') \/
+          (exists r, r < n /\
+              D ≡[n] D' ⨥ n[r ↦ 2] /\
+              D_hol ≡[n_hol] D_hol' ⨥ n_hol[r ↦ 2]))
+    /\  wf_EC_proc m (n + n') m (n + n') 
           G (D' ⊗ flat_ctxt 1 n') G_hol D_hol'
           (rename_rvar_EC_proc R EP).
 
@@ -1220,19 +1238,22 @@ Lemma rename_rvar_pres_wf_EC :
     (forall m n m_hol n_hol G_hol D_hol Et,
       wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
     let n' := bound_rvars_at_hole_scope Et in
-    forall (R : ren n_hol n_hol) D_hol',
-      wf_hs_ren (bound_rvars_at_hole_scope Et) R D_hol D_hol' ->
+    forall (R : ren n_hol n_hol),
+      wf_hs_ren (bound_rvars_at_hole_scope Et) R ->
+      exists D_hol',
       wf_EC_term m n m_hol n_hol G_hol D_hol'
           (mutate_under_hole_scope (rename_rvar_EC_proc R) Et))
 /\  (forall m n m_hol n_hol G D G_hol D_hol EP,
       wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP ->
-    forall (R : ren n_hol n_hol) D_hol',
+    forall (R : ren n_hol n_hol),
       (is_hole_scope_at_top_proc EP = true /\
       (wf_ren R ->
+        exists D_hol',
         wf_EC_proc m n m_hol n_hol G (lctxt_rename R D)
             G_hol D_hol' (rename_rvar_EC_proc R EP)))
   \/  (is_hole_scope_at_top_proc EP = false /\
-      (wf_hs_ren (bound_rvars_at_hole_scope (Ebag 0 0 EP)) R D_hol D_hol' ->
+      (wf_hs_ren (bound_rvars_at_hole_scope (Ebag 0 0 EP)) R ->
+        exists D_hol',
         wf_EC_proc m n m_hol n_hol G D G_hol D_hol'
             (mutate_under_hole_scope_proc (rename_rvar_EC_proc R) EP)))).
 Proof.
@@ -1248,8 +1269,9 @@ Proof.
         repeat rewrite H3; simpl. destruct x0. auto.
     }
     rewrite H1; clear H1.
-    specialize H with R; dest_conj_disj_exist; auto.
-    + destruct H0. apply H1 in H0; clear H1. 
+    specialize H with R; destruct H.
+    dest_conj_disj_exist.
+    + destruct H0. apply H1 in H0; clear H1; destruct H0. 
       assert (H1 := H0); apply wf_hs_var_bounds_eq_proc in H1.
       2: rewrite ren_pres_hs_proc; auto.
       destruct H1; subst.
@@ -1260,12 +1282,13 @@ Proof.
       }
       rewrite H1 in H2; clear H1.
       assert (n + n' = n + n') by auto.
-      eapply H2 in H1; eauto.
-      dest_conj_disj_exist.
-      eapply wf_Ebag with (D := x); eauto.
+      eapply H2 in H1; clear H2; eauto.
       unfold mutate_under_hole_scope_proc, mutate_under_hole_scope.
       rewrite inv_hole_scope_at_top; auto.
-    + econstructor; eauto.
+      dest_conj_disj_exist.
+      * exists x1. econstructor; eauto.
+      * exists x1. eapply wf_Ebag with (D := x0); eauto.
+    + destruct H.
       assert (bound_rvars_at_hole_scope (Ebag 0 0 EP) =
                 bound_rvars_at_hole_scope (Ebag m n EP)).
       {
@@ -1274,11 +1297,13 @@ Proof.
         dest_conj_disj_exist.
         now repeat rewrite H4.
       }
-      rewrite H2 in H1; auto.
+      rewrite H2 in H1. apply H1 in H0; clear H1.
+      destruct H0. exists x.
+      econstructor; eauto.
   (* Ehol by context rewriting *)
-  - left; split; auto.
-    econstructor; eauto.
-    now apply lctxt_rename_ctxt_eq.
+  - left; split; auto; intros.
+    exists (lctxt_rename R D).
+    econstructor; eauto; reflexivity.
   (* Edeflam by IH, which needs massaging *)
   - right; split; auto; intros.
     assert (bound_rvars_at_hole_scope Et =
@@ -1290,25 +1315,27 @@ Proof.
     }
     rewrite H1 in H; clear H1.
     apply H in H0; clear H.
+    destruct H0. exists x.
     assert (forall f, mutate_under_hole_scope_proc f (Edeflam r Et) = 
               Edeflam r (mutate_under_hole_scope f Et)).
     {
       intros. destruct Et.
       unfold mutate_under_hole_scope_proc, mutate_under_hole_scope; simpl.
-      destruct (is_hole_scope_at_top_proc EP) eqn:H.
+      destruct (is_hole_scope_at_top_proc EP) eqn:H0.
       - rewrite build_hs_correct_Edeflam; simpl; auto.
         rewrite build_hs_correct_Ehol_Epar; auto.
-      - apply build_not_hs_correct in H; dest_conj_disj_exist.
-        repeat rewrite H2; simpl. destruct x0. auto.
+      - apply build_not_hs_correct in H0; dest_conj_disj_exist.
+        repeat rewrite H2; simpl. destruct x1. auto.
     }
-    rewrite H; clear H.
+    rewrite H0; clear H0.
     econstructor; eauto.
   (* Epar is by IH, context rewriting,
       and process renaming preservation *)
   - specialize H with R; dest_conj_disj_exist.
-    + left; split; auto.
+    + left; split; auto; intros.
       apply wf_hs_var_bounds_eq in WFP1; auto.
       destruct WFP1; subst.
+      destruct (H0 H1); clear H0. exists x.
       econstructor; eauto.
       * apply rename_rvar_pres_wf; eauto.
       * rewrite lctxt_rename_ctxt_eq; eauto.
@@ -1323,10 +1350,11 @@ Proof.
       }
       rewrite H2 in H1; clear H2.
       apply H0 in H1; clear H0.
+      destruct H1. exists x.
       unfold mutate_under_hole_scope_proc, mutate_under_hole_scope in *; 
           simpl in *.
       apply build_not_hs_correct in H; dest_conj_disj_exist.
-      rewrite H2 in *; simpl in *. destruct x0.
+      rewrite H2 in *; simpl in *. destruct x1.
       econstructor; eauto.
 Qed.
 

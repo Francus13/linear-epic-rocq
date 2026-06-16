@@ -5,5 +5,5 @@ theories/Permutations.v
 theories/Syntax.v
 theories/EvalContexts.v
 theories/Semantics.v
-theories/Observations.v
 theories/Confluence.v
+theories/Observations.v
