@@ -278,7 +278,7 @@ Qed.
 Infix "⨥" := (@sum _) (at level 50).
 
 Lemma sum_ctxt_eq_inv : forall n (c1 c2 d : lctxt n),
-    (c1 ⨥ c2) ≡[n] d -> exists d1 d2, d = (d1 ⨥ d2) /\ (d1 ≡[n] c1) /\ (d2 ≡[n] c2).
+    c1 ⨥ c2 ≡[n] d -> exists d1 d2, d = d1 ⨥ d2 /\ d1 ≡[n] c1 /\ d2 ≡[n] c2.
 Proof.
   unfold sum, ctxt_eq.
   intros.
@@ -296,7 +296,14 @@ Proof.
   - intros.
     destruct (lt_dec x n); auto.
     lia.
-Qed.    
+Qed.
+
+Lemma ctxt_eq_sum_inv : forall n (c1 c2 d : lctxt n),
+    c1 ⨥ d ≡[n] c2 ⨥ d -> c1 ≡[n] c2.
+Proof.
+  unfold sum, ctxt_eq.
+  intros. remember (H x H0). lia.
+Qed.
 
 Definition flat_ctxt i n : lctxt n := fun (x:nat) => i. 
 Definition zero n : lctxt n := flat_ctxt 0 n.

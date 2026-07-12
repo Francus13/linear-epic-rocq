@@ -1019,6 +1019,33 @@ Lemma rename_rvar_fvar_commute_oper : forall m m' n n' (fv : ren m m') (rv : ren
     rename_rvar_oper rv (rename_fvar_oper fv o) = rename_fvar_oper fv (rename_rvar_oper rv o).
 Proof. intros; apply rename_rvar_fvar_commute_tpo. Qed.
 
+
+
+(* EC Renaming does not rely on the bounds of the renaming *)
+Lemma rename_rvar_ind :
+  (forall (t : term),
+    True)
+  /\
+  (forall P n1 n1' n2 n2' (R1 : ren n1 n1') (R2 : ren n2 n2'),
+    R1 = R2 ->
+      rename_rvar_proc R1 P = rename_rvar_proc R2 P)
+  /\
+  (forall o n1 n1' n2 n2' (R1 : ren n1 n1') (R2 : ren n2 n2'),
+    R1 = R2 ->
+      rename_rvar_oper R1 o = rename_rvar_oper R2 o).
+Proof.
+  apply tpo_ind; intros; simpl.
+  (* By IHs *)
+  all: try rewrite H; try rewrite H0; auto.
+  erewrite H; eauto; erewrite H0; eauto.
+Qed.
+
+Lemma rename_rvar_ind_proc : forall P n1 n1' n2 n2' (R1 : ren n1 n1') (R2 : ren n2 n2'),
+    R1 = R2 -> rename_rvar_proc R1 P = rename_rvar_proc R2 P.
+Proof. apply rename_rvar_ind. Qed.
+Lemma rename_rvar_ind_oper : forall o n1 n1' n2 n2' (R1 : ren n1 n1') (R2 : ren n2 n2'),
+    R1 = R2 -> rename_rvar_oper R1 o = rename_rvar_oper R2 o.
+Proof. apply rename_rvar_ind. Qed.
   
 
 
@@ -1074,6 +1101,7 @@ Proof. intros; eapply rename_fvar_id_tpo; eauto. Qed.
 Lemma rename_fvar_id_oper :
  forall m n (o:oper), ws_oper m n o -> rename_fvar_oper (ren_id m) o = o.
 Proof. intros; eapply rename_fvar_id_tpo; eauto. Qed.
+  
 
 
 
