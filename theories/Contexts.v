@@ -113,15 +113,11 @@ Infix "⊗" := (@ctxt_app _ _ _) (at level 50).
 Lemma ctxt_app_null_l : forall {X} {n} (c : ctxt 0 X) (d : ctxt n X),
     c ⊗ d = d.
 Proof.
-  unfold ctxt_app.
-  intros.
-  apply functional_extensionality.
-  intros x.
+  intros. unfold ctxt_app; apply functional_extensionality; intros.
   destruct (lt_dec x 0).
-  - inversion l.
-  - replace x with (x - 0) at 2 by apply Nat.sub_0_r.
-    reflexivity.
-Qed.  
+  - lia.
+  - rewrite Nat.sub_0_r; auto.
+Qed.
 
 Lemma ctxt_app_l : forall {X} {n m} (c : ctxt n X) (d : ctxt m X),
     (c ⊗ d) ≡[n] c.
@@ -142,15 +138,6 @@ Proof.
   destruct (lt_dec x n).
   - lia.
   - reflexivity.
-Qed.
-
-Lemma ctxt_app_0_l : forall {X n} (c : ctxt 0 X) (d : ctxt n X),
-  (c ⊗ d) = d.
-Proof.
-  intros. unfold ctxt_app; apply functional_extensionality; intros.
-  destruct (lt_dec x 0).
-  - lia.
-  - rewrite Nat.sub_0_r; auto.
 Qed.
 
 Lemma ctxt_app_assoc : forall {X} {n m l} (c : ctxt n X) (d : ctxt m X) (e : ctxt l X),
@@ -349,6 +336,10 @@ Proof.
   destruct (lt_dec x n1); auto.
 Qed.
 
+Lemma app_zero : forall n1 n2,
+  @ctxt_app _ n1 n2 (zero n1) (zero n2) = zero (n1 + n2).
+Proof. unfold zero; apply app_flat. Qed.
+
 Lemma zero_scons : forall n, (zero (S n)) = (@cons _ n 0 (zero n)).
 Proof. exact (flat_scons 0). Qed. 
 Lemma zero_tail : forall n, (@tail _ n (zero (S n))) = zero n.
@@ -419,6 +410,10 @@ Definition delta (n:nat) (x:var) (c : nat) : lctxt n :=
       
 Notation "n [ x ↦ c ]" := (delta n x c).
 
+Definition one n (x : var) : lctxt n := n[x ↦ 1].
+
+
+
 Lemma delta_id : forall (n:nat) (x : var) (c:nat),
     x < n ->
     n[x ↦ c] x = c.
@@ -472,6 +467,15 @@ Proof.
   destruct (lt_dec x n); destruct (Nat.eq_dec x x0); auto.
 Qed.
 
+Lemma delta_change_bound : forall n n' x c,
+    x < n ->
+    n[x ↦ c] = (n + n')[x ↦ c].
+Proof.
+  intros. unfold delta.
+  destruct (lt_dec x n); destruct (lt_dec x (n + n')); 
+      try lia; auto.
+Qed.
+
 
 Lemma delta_sum : forall n (x : var) c1 c2 ,
     n[x ↦ c1] ⨥ n[x ↦ c2] = n[x ↦ (c1 + c2)].
@@ -483,8 +487,6 @@ Proof.
   destruct (lt_dec x n); auto.
   destruct (Nat.eq_dec x x0); auto.
 Qed.
-
-Definition one n (x : var) : lctxt n := n[x ↦ 1].
 
 
 Lemma delta_sum_ctxt_eq_inv : forall n x y (c d : lctxt n),
@@ -1119,12 +1121,11 @@ Qed.
 
 
 
-  
 
 
-(* FRAN: I commented out the injective/surjective since
-    it doesn't work with the new wf_ren definition (see above).
 
+
+(*
   (* bijections *)
 
   Lemma wf_ren_bFun : forall {n} (r : ren n n),
@@ -1141,7 +1142,8 @@ Qed.
     bSurjective n r.
 
   Definition ren_inverses {n} (r r_inv : ren n n) :=
-    forall x, x < n -> r_inv (r x) = x /\ r (r_inv x) = x.
+    forall x, (x < n -> r_inv (r x) = x /\ r (r_inv x) = x)
+          /\ (x >= n -> r_inv (r x) >= n /\ r (r_inv x) >= n).
 
   Lemma ren_inverses_comm : forall {n} (r r_inv : ren n n),
       ren_inverses r r_inv ->
@@ -1149,7 +1151,7 @@ Qed.
   Proof.
     unfold ren_inverses.
     intros.
-    split; apply H; auto.
+    repeat split; apply H; auto.
   Qed.
   
   Lemma ren_inverses_exist : forall {n} (r : ren n n),
@@ -1165,9 +1167,8 @@ Qed.
     split.
     - unfold wf_ren. intros.
       destruct (lt_dec x n); intros.
-      + split; intros. apply HR. assumption.
-        contradiction.
-      + split; intros. contradiction. reflexivity.
+      + split; intros. apply HR. assumption. lia.
+      + split; intros. contradiction. lia.
     - unfold ren_inverses.
       intros.
       destruct (lt_dec (r x) n).
@@ -1223,16 +1224,7 @@ Ltac unfold_wf_bij_ren WBH :=
     exists (ren_id n).
     unfold ren_id.
     split; intros; split; intros.
-    - destruct (lt_dec x n); auto.
-      contradiction.
-    - destruct (lt_dec x n); auto.
-      contradiction.
-    - destruct (lt_dec x n); auto.
-      destruct (lt_dec x n); auto. contradiction.
-      contradiction.
-    - destruct (lt_dec x n); auto.
-      destruct (lt_dec x n); auto. contradiction.
-      contradiction.
+    all: destruct (lt_dec x n); auto.
   Defined.
 
   Lemma wf_bij_ren_id : forall {n}, wf_bij_ren (ren_id n).
@@ -1260,9 +1252,7 @@ Ltac unfold_wf_bij_ren WBH :=
         lia.
       + intros.
         assert (~ (x - n < m)). lia.
-        assert (r2 (x - n) = m). apply H0.  assumption.
-        rewrite H3.
-        reflexivity.
+        assert (r2 (x - n) >= m). apply H0. lia. lia.
   Qed.
     
 
@@ -1325,8 +1315,6 @@ Ltac unfold_wf_bij_ren WBH :=
     apply functional_extensionality.
     intros x.
     destruct (lt_dec x n); try lia.
-    - destruct (lt_dec x (n + m)); try lia.
-    - destruct (lt_dec x (n + m)); destruct (lt_dec (x - n) m); try lia.
   Qed.
 
 Lemma ren_shift_bij_app : forall {n} k (r : ren n n),
@@ -1376,7 +1364,16 @@ Proof. auto. Qed.
       assert (r_inv (r x ) = x). {  apply BRI.  assumption. }
       rewrite H1.
       reflexivity.
-    - assert (r' x = n). { apply WR'; auto. }
+    - unfold ren_inverses in *.
+      assert (r x >= n). { apply HWF; lia. }
+      assert (r' (r_inv (r x)) = r x). { apply BR'. lia. }
+      rewrite <- H0.
+      assert (r_inv (r x ) = x). {  apply BRI.  assumption. }
+      rewrite H1.
+      reflexivity.
+    
+    
+    assert (r' x = n). { apply WR'; auto. }
       assert (r x = n). { apply HWF; auto. }
       rewrite H. rewrite H0. reflexivity.
   Qed.                               

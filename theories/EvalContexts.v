@@ -171,6 +171,9 @@ Definition mutate_under_hole_scope (f : EC_proc -> EC_proc) (Et : EC_term) :=
   in
   mutate_hole_scope f_term Et.
 
+Definition mutate_hole_scope_proc (f : EC_term -> EC_term) (EP : EC_proc) :=
+  match mutate_hole_scope f (Ebag 0 0 EP) with Ebag _ _ EP' => EP' end.
+
 Definition mutate_under_hole_scope_proc (f : EC_proc -> EC_proc) (EP : EC_proc) :=
   match mutate_under_hole_scope f (Ebag 0 0 EP) with Ebag _ _ EP' => EP' end.
 
@@ -1320,6 +1323,35 @@ Definition wf_hs_ren {n_hol} n (R : ren n_hol n_hol)
 
 
 
+
+Lemma rename_rvar_pres_wf_hs_EC :
+  forall EP m n m_hol n_hol G D G_hol D_hol,
+    wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP ->
+    is_hole_scope_at_top_proc EP = true ->
+  forall (R : ren n_hol n_hol),
+    wf_ren R ->
+    wf_EC_proc m n m_hol n_hol G (lctxt_rename R D)
+        G_hol (lctxt_rename R D_hol) (rename_rvar_EC_proc R EP).
+Proof.
+  induction EP; simpl; intros.
+  - inversion H; existT_eq; subst.
+    econstructor; eauto.
+    now apply lctxt_rename_ctxt_eq.
+  - discriminate.
+  - inversion H; existT_eq; subst.
+    apply wf_hs_var_bounds_eq_proc in H; auto.
+    destruct H; subst; auto.
+    econstructor; eauto.
+    + apply rename_rvar_pres_wf; eauto.
+    + rewrite <- lctxt_rename_sum.
+      now apply lctxt_rename_ctxt_eq.
+Qed.
+
+
+
+
+
+
 (* EC renaming preserves well-formedness *)
 Lemma rename_rvar_pres_wf_EC :
     (forall m n m_hol n_hol G_hol D_hol Et,
@@ -1341,6 +1373,7 @@ Lemma rename_rvar_pres_wf_EC :
             (mutate_under_hole_scope_proc (rename_rvar_EC_proc R) EP)))).
 Proof.
   apply wf_EC_ind; simpl; intros.
+  (* Ebag *)
   - assert (forall f, mutate_under_hole_scope f (Ebag m n EP) = 
               Ebag m n (mutate_under_hole_scope_proc f EP)).
     {
@@ -1497,7 +1530,7 @@ Proof.
     now apply wf_ren_shift.
     (* Ehol *)
   - econstructor; eauto.
-    unfold ren_shift; rewrite ctxt_app_0_l; simpl.
+    unfold ren_shift; rewrite ctxt_app_null_l; simpl.
     assert ((fun x : var => R x) = R) by now apply functional_extensionality.
     rewrite H; clear H.
     now apply lctxt_rename_ctxt_eq.
@@ -1543,6 +1576,102 @@ Proof.
     econstructor; eauto.
     apply wf_hs_var_bounds_eq_term in WFT, H1; auto.
     assert (m' = x0) by lia; assert (n' = 1) by lia; now subst.
+Qed.
+
+
+
+
+
+
+
+
+Definition wf_hs_fun f Et m_hol n_hol G_hol D_hol 
+                          m_hol' n_hol' G_hol' D_hol' :=
+  forall m n,
+    is_hole_scope_at_top Et = true ->
+    wf_EC_term m n m_hol n_hol G_hol D_hol  Et ->
+    wf_EC_term m n m_hol' n_hol' G_hol' D_hol' (f Et).
+
+Lemma wf_hs_fun_hole_scope :
+  forall f Et m_hol n_hol G_hol D_hol 
+              m_hol' n_hol' G_hol' D_hol',
+      let f_hs := mutate_under_hole_scope f in
+      let f_ub := fun Et : EC_term =>
+              match Et with Ebag m n EP => Ebag m n (f EP) end in
+    wf_hs_fun f_hs (hole_scope Et) m_hol n_hol G_hol D_hol 
+                      m_hol' n_hol' G_hol' D_hol' ->
+    wf_hs_fun f_ub (hole_scope Et) m_hol n_hol G_hol D_hol 
+                                   m_hol' n_hol' G_hol' D_hol'.
+Proof.
+  intros; unfold f_hs, f_ub in *; clear f_hs f_ub.
+  unfold wf_hs_fun in *; intros.
+  unfold mutate_under_hole_scope, mutate_hole_scope in H.
+  rewrite inv_hole_scope_at_top in H; auto.
+Qed.
+
+
+
+
+(* EC renaming preserves well-formedness *)
+Lemma mutate_hole_scope_wf' :
+    (forall m n m_hol n_hol G_hol D_hol Et,
+      wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
+    forall f m_hol' n_hol' G_hol' D_hol',
+      wf_hs_fun f (hole_scope Et) m_hol n_hol G_hol D_hol 
+                    m_hol' n_hol' G_hol' D_hol' ->
+      wf_EC_term m n m_hol' n_hol' G_hol' D_hol'
+          (mutate_hole_scope f Et))
+/\  (forall m n m_hol n_hol G D G_hol D_hol EP,
+      wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP ->
+    forall f m_hol' n_hol' G_hol' D_hol',
+      is_hole_scope_at_top_proc EP = false ->
+      wf_hs_fun f (hole_scope (Ebag 0 0 EP)) m_hol n_hol G_hol D_hol 
+                    m_hol' n_hol' G_hol' D_hol' ->
+      wf_EC_proc m n m_hol' n_hol' G D G_hol' D_hol'
+          (mutate_hole_scope_proc f EP)).
+Proof.
+  apply wf_EC_ind; simpl; intros.
+  (* Ebag *)
+  - clear H; unfold mutate_hole_scope; unfold hole_scope in H0.
+    destruct (is_hole_scope_at_top (Ebag m n EP)) eqn:HS.
+    + rewrite inv_hole_scope_at_top in *; auto.
+      eapply H0; auto.
+      econstructor; eauto.
+    + apply inv_hole_scope_not_at_top in HS; dest_conj_disj_exist.
+      rewrite H2 in *; clear H2; auto.
+      destruct x; simpl in *.
+      injection H; clear H; intros; subst.
+      apply inv_EC_fill_wf in WFP; dest_conj_disj_exist.
+      econstructor; eauto.
+      eapply EC_fill_wf_pres_proc; eauto.
+      inversion H; clear H; existT_eq; subst.
+      econstructor; eauto.
+  (* Ehol *)
+  - discriminate.
+  (* Edeflam *)
+  - clear H0 WFT.
+    replace (Ebag 0 0 (Edeflam r Et)) with 
+        (Ebag 0 0 Ehol <=<[ Edeflam r Et ]) in H1 by auto.
+    rewrite hole_scope_of_fill_Edeflam in H1. 
+    assert (H0 := H1); apply H in H0; clear H.
+    unfold mutate_hole_scope_proc, mutate_hole_scope in *.
+    destruct Et; simpl in *.
+    destruct (is_hole_scope_at_top_proc EP) eqn:HS.
+    + rewrite build_hs_correct_Edeflam; auto; simpl.
+      rewrite build_hs_correct_Ehol_Epar in H0; auto.
+      econstructor; eauto.
+    + apply build_not_hs_correct in HS; dest_conj_disj_exist.
+      subst; rewrite H3 in *; clear H3; simpl in *.
+      econstructor; eauto.
+  (* Epar *)
+  - replace (Ebag 0 0 (Epar EP P)) with 
+        (Ebag 0 0 Ehol <=<[ Epar EP P ]) in H1 by auto.
+    rewrite hole_scope_of_fill_Epar with (m := 0) (n := 0) in H1; auto. 
+    apply H in H1; auto.
+    apply build_not_hs_correct in H0; dest_conj_disj_exist.
+    unfold mutate_hole_scope_proc, mutate_hole_scope in *; simpl in *.
+    rewrite H3 in *; clear H3; subst; simpl in *.
+    econstructor; eauto.
 Qed.
 
 

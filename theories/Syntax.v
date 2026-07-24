@@ -853,6 +853,47 @@ Proof. apply tpo_wf_ws. Qed.
 
 
 
+(* The bound of free variables can be weakened *)
+Lemma wf_weaken_free_vars :
+  (forall m n t,
+      wf_term m n t ->
+    forall m',
+      wf_term (m + m') n t)
+  /\
+  (forall m n G D P,
+      wf_proc m n G D P ->
+    forall m' n',
+      wf_proc (m + m') (n + n') (G ⊗ zero m') (D ⊗ zero n') P)
+  /\
+  (forall m n G D o,
+      wf_oper m n G D o ->
+    forall m' n',
+      wf_oper (m + m') (n + n') (G ⊗ zero m') (D ⊗ zero n') o).
+Proof.
+  apply wf_tpo_ind; intros.
+
+  (* All cases are by rewriting *)
+  all: try solve [
+    econstructor; eauto; try lia;
+    try rewrite HG; try rewrite HD;
+    unfold one; repeat rewrite delta_app_zero_r;
+    repeat rewrite app_zero; 
+    repeat rewrite sum_delta_comm_app_zero_l;
+    repeat rewrite sum_app_zero;
+    repeat rewrite delta_app_zero_r;
+    auto; try reflexivity
+  ].
+
+  (* Bag needs special rewriting *)
+  econstructor; eauto; try lia.
+  specialize H with m'0 0.
+    rewrite Nat.add_assoc;
+    rewrite Nat.add_0_r, (ctxt_app_l _ (zero 0)),
+        <- ctxt_app_assoc, app_zero in H; auto.
+Qed.
+
+
+
 (* renaming ----------------------------------------------------------------- *)
 
 (* The operational semantics involve renaming resource identifiers.
