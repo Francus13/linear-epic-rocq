@@ -338,14 +338,44 @@ Qed.
 
 (* Helper functions for function application *)
 
-(* Adds new bound fvars to the end of the top scope, shifting all free fvars *)
+(* Adds new bound vars to the end of the top scope, shifting all free fvars *)
 Definition add_fvars m_new Et : EC_term :=
-  let Et_new := match Et with Ebag m n EP => Ebag (m + m_new) n EP end in
-  rename_fvar_EC_term (weaken_ren 0 m_new) Et_new.
+  let Et_new := rename_fvar_EC_term (weaken_ren 0 m_new) Et in
+  match Et_new with Ebag m n EP => Ebag (m + m_new) n EP end.
 
 (* Adds new bound fvars to the hole scope, shifting all its free fvars *)
 Definition add_fvars_hole_scope m_new : EC_term -> EC_term :=
   mutate_hole_scope (add_fvars m_new).
+
+(* Adds new bound rvars to the end of the top scope *)
+Definition add_rvars n_new Et : EC_term :=
+  let Et_new := rename_rvar_EC_term (weaken_ren 0 n_new) Et in
+  match Et_new with Ebag m n EP => Ebag m (n + n_new) EP end.
+
+(* Adds new bound rvars to the hole scope, shifting all its free fvars *)
+Definition add_rvars_hole_scope n_new : EC_term -> EC_term :=
+  mutate_hole_scope (add_rvars n_new).
+
+
+
+Lemma add_fvars_wf_hs_fun :
+  forall m_new Et m_hol n_hol G_hol D_hol,
+    wf_hs_fun (add_fvars m_new) (hole_scope Et)
+        m_hol n_hol G_hol D_hol
+        (m_hol + m_new) n_hol (G_hol ⊗ zero m_new) D_hol.
+Proof.
+
+Admitted.
+
+Lemma add_rvars_wf_hs_fun :
+  forall n_new Et m_hol n_hol G_hol D_hol,
+    wf_hs_fun (add_rvars n_new) (hole_scope Et)
+        m_hol n_hol G_hol D_hol
+        m_hol (n_hol + n_new) G_hol (D_hol ⊗ zero n_new).
+Proof.
+
+Admitted.
+
 
 
 (* Renames rvars in a lambda body for its application
@@ -368,7 +398,7 @@ Definition ready_body_rvar (n_app n r_arg : nat) (P : proc) : proc :=
 Definition ready_body_fvar_same_scope (m_app m : nat) (P : proc) : proc :=
     (* Move the m bindings to end of new local scope : 
         [m + m_app + m_free] -> [m_app + m + m_free] *)
-  rename_rvar_proc (ren_commute_str 0 m m_app 0) P.
+  rename_fvar_proc (ren_commute_str 0 m m_app 0) P.
 
 (* Renames fvars in a lambda body for an application,
    for when the lambda and application are in different scopes (read above)
@@ -380,7 +410,7 @@ Definition ready_body_fvar_diff_scope (m_inner m_app m : nat) (P : proc) : proc 
   let P1 := rename_rvar_proc (weaken_ren m (m_app + m_inner)) P in
     (* Move the m bindings to end of new local scope : 
           [m_app + m_inner + m + m_free] -> [m_app + m + m_inner + m_free] *)
-  rename_rvar_proc (ren_commute_str m_app m_inner m 0) P1.
+  rename_fvar_proc (ren_commute_str m_app m_inner m 0) P1.
 
 
 (* Readies a lambda body for insertion into the application's scope
@@ -411,6 +441,10 @@ Definition ready_body_diff_scope (Et : EC_term) (t : term) (r_arg : nat) : proc 
     let m_inner := bound_fvars_before_hole_scope Et in
     ready_body_fvar_diff_scope m_inner m_app m P'
   end.
+
+Definition shift_hs_by_term_vars (t : term) (Et : EC_term) : EC_term :=
+  let Et' := add_fvars_hole_scope (get_fvars t) Et in
+  add_rvars_hole_scope (get_rvars t + 1) Et'.
 
 
 
@@ -505,8 +539,8 @@ Inductive prim_step : term -> term -> Prop :=
   forall Et t f rf r,    (*  -->  Et <=[ '' | '' | fresh_body(t){r=r'} ]  *)
       (* Get the freshened and applied body *)
     let new_body := ready_body_same_scope Et t r in
-      (* Shift the fvars in the application's scope *)
-    let Et_shifted := add_fvars_hole_scope (get_fvars t) Et in
+      (* Shift the vars in the application's scope *)
+    let Et_shifted := shift_hs_by_term_vars t Et in
     prim_step
       (Et         <=[ (par (app f r)
                       (par (def rf (lam t))
@@ -521,8 +555,8 @@ Inductive prim_step : term -> term -> Prop :=
     let f' := f + (bound_fvars_to_hole Et) in
       (* Get the freshened and applied body *)
     let new_body := ready_body_diff_scope Et t r in
-      (* Shift the fvars in the application's scope *)
-    let Et_shifted := add_fvars_hole_scope (get_fvars t) Et in
+      (* Shift the vars in the application's scope *)
+    let Et_shifted := shift_hs_by_term_vars t Et in
     prim_step
       (Et' <=[ (par (def rl (lam (Et         <=[ app f' r ])))
                (par (def rf (lam t))
@@ -652,7 +686,7 @@ Proof.
   2: econstructor; reflexivity.
 
   unfold rename_at_hole_scope.
-  eapply mutate_hole_scope_wf'; eauto.
+  eapply mutate_hole_scope_wf; eauto.
   apply wf_hs_fun_hole_scope.
   erewrite rename_rvar_EC_proc_indep 
       with (R2 := rename_var n_hol n_bound r1 r2); eauto.
@@ -664,7 +698,7 @@ Qed.
 Lemma wf_prim_step_app_same_scope :
   forall m n Et t f rf r,
     let new_body := ready_body_same_scope Et t r in
-    let Et_shifted := add_fvars_hole_scope (get_fvars t) Et in
+    let Et_shifted := shift_hs_by_term_vars t Et in
     wf_term m n (Et         <=[ (par (app f r)
                                 (par (def rf (lam t))
                                      (def rf (bng f)))) ]) ->
@@ -678,21 +712,38 @@ Proof.
   rewrite sum_zero_l in H2.
   destruct t; simpl in *.
   eapply fill_wf_pres_term with 
-      (m_hol := m_hol + m0) (n_hol := n_hol + n0).
-      (* (G_hol := (G2 ⊗ ()) (D_hol := one (n_hol + n0) r ⨥ D2). *)
+      (m_hol := m_hol + m0) (n_hol := n_hol + (n0 + 1))
+      (G_hol := G2 ⊗ (zero m0)) 
+      (D_hol := (n_hol + (n0 + 1)) [r ↦ 2] ⨥ 
+                (n_hol + (n0 + 1)) [(n0 + bound_rvars_at_hole_scope Et) ↦ 1] ⨥
+                (D2 ⊗ zero (n0 + 1))).
   2: econstructor.
   3: apply wf_weaken_free_vars; eauto.
+  3: now rewrite sum_zero_l.
+  3: reflexivity.
 
   - unfold Et_shifted; clear Et_shifted new_body.
-    unfold add_fvars_hole_scope.
-    admit.
+    unfold shift_hs_by_term_vars; simpl.
+    do 2 (try eapply mutate_hole_scope_wf); eauto.
+    * apply add_fvars_wf_hs_fun.
+    * apply add_rvars_wf_hs_fun.
   - unfold new_body; clear Et_shifted new_body.
-    assert (wf_term m_hol 1 (bag m0 n0 P)) by
-        (inversion WFP2; inversion WFP1; now inversion WFO).
-    admit.
-  - 
-  
-  unfold Et_shifted, new_body; clear Et_shifted new_body.
+    (* assert (wf_term m_hol 1 (bag m0 n0 P)) by
+        (inversion WFP2; inversion WFP1; now inversion WFO). *)
+    unfold ready_body_fvar_same_scope, ready_body_rvar; simpl.
+    destruct rem_hole_rvar_EC_wf; clear H.
+    eapply H0.
+    econstructor.
+    + econstructor; eauto; try reflexivity; try lia.
+      apply wf_hs_vars_correct in H2; lia.
+    + admit.
+      (* destruct rename_fvar_pres_wf.
+      destruct H0. clear H H1.
+      rewrite (Nat.add_comm m0).
+      apply H0. *)
+    + now rewrite sum_zero_l.
+    +
+
 
 Qed.
 
