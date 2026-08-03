@@ -1402,7 +1402,7 @@ Definition wf_hs_fun f Et m_hol n_hol G_hol D_hol
                           m_hol' n_hol' G_hol' D_hol' :=
   forall m n,
     is_hole_scope_at_top Et = true ->
-    wf_EC_term m n m_hol n_hol G_hol D_hol  Et ->
+    wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
     wf_EC_term m n m_hol' n_hol' G_hol' D_hol' (f Et).
 
 Lemma wf_hs_fun_hole_scope :

@@ -711,29 +711,36 @@ Proof.
       clear H1 WFP1; rewrite_ctxt_equivs.
   rewrite sum_zero_l in H2.
   destruct t; simpl in *.
+  assert (WFPT := WFP2).
+  inversion WFPT; inversion WFP1; inversion WFO; inversion WFT; 
+      existT_eq; subst. rewrite_ctxt_equivs.
+  rewrite sum_zero_l, sum_zero_r in *.
+  clear WFP1 WFP0 WFO.
   eapply fill_wf_pres_term with 
       (m_hol := m_hol + m0) (n_hol := n_hol + (n0 + 1))
-      (G_hol := G2 ⊗ (zero m0)) 
+      (G_hol := G2 ⊗ (flat_ctxt 1 m0)) 
       (D_hol := (n_hol + (n0 + 1)) [r ↦ 2] ⨥ 
-                (n_hol + (n0 + 1)) [(n0 + bound_rvars_at_hole_scope Et) ↦ 1] ⨥
-                (D2 ⊗ zero (n0 + 1))).
+                (D2 ⊗ D6 ⊗ 1 [(n0 + bound_rvars_at_hole_scope Et) ↦ 2])).
   2: econstructor.
   3: apply wf_weaken_free_vars; eauto.
-  3: now rewrite sum_zero_l.
-  3: reflexivity.
+  (* 3: now rewrite sum_zero_l.
+  3: reflexivity. *)
 
   - unfold Et_shifted; clear Et_shifted new_body.
     unfold shift_hs_by_term_vars; simpl.
     do 2 (try eapply mutate_hole_scope_wf); eauto.
     * apply add_fvars_wf_hs_fun.
-    * apply add_rvars_wf_hs_fun.
+    * admit.
+      (* apply add_rvars_wf_hs_fun. *)
   - unfold new_body; clear Et_shifted new_body.
     (* assert (wf_term m_hol 1 (bag m0 n0 P)) by
         (inversion WFP2; inversion WFP1; now inversion WFO). *)
     unfold ready_body_fvar_same_scope, ready_body_rvar; simpl.
-    destruct rem_hole_rvar_EC_wf; clear H.
-    eapply H0.
+    (* destruct rem_hole_rvar_EC_wf; clear H.
+    eapply H0. *)
     econstructor.
+    3: now rewrite sum_zero_l.
+    3: reflexivity.
     + econstructor; eauto; try reflexivity; try lia.
       apply wf_hs_vars_correct in H2; lia.
     + admit.
@@ -741,8 +748,6 @@ Proof.
       destruct H0. clear H H1.
       rewrite (Nat.add_comm m0).
       apply H0. *)
-    + now rewrite sum_zero_l.
-    +
 
 
 Qed.
