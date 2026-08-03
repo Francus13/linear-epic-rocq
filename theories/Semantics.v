@@ -711,18 +711,27 @@ Proof.
       clear H1 WFP1; rewrite_ctxt_equivs.
   rewrite sum_zero_l in H2.
   destruct t; simpl in *.
-  assert (WFPT := WFP2).
-  inversion WFPT; inversion WFP1; inversion WFO; inversion WFT; 
-      existT_eq; subst. rewrite_ctxt_equivs.
-  rewrite sum_zero_l, sum_zero_r in *.
-  clear WFP1 WFP0 WFO.
+  inversion WFP2; inversion WFP1; inversion WFO; inversion WFT; 
+      existT_eq; subst; rewrite_ctxt_equivs; rewrite sum_zero_l, sum_zero_r in *;
+      clear WFP1 WFP0 WFO WFT HN' G0 D0 G1 D1 G2 D2.
   eapply fill_wf_pres_term with 
       (m_hol := m_hol + m0) (n_hol := n_hol + (n0 + 1))
-      (G_hol := G2 ⊗ (flat_ctxt 1 m0)) 
-      (D_hol := (n_hol + (n0 + 1)) [r ↦ 2] ⨥ 
-                (D2 ⊗ D6 ⊗ 1 [(n0 + bound_rvars_at_hole_scope Et) ↦ 2])).
-  2: econstructor.
+      (G_hol := G3 ⊗ G6) 
+      (D_hol := (n_hol + (n0 + 1)) [r ↦ 1] ⨥
+                (n_hol + (n0 + 1)) [(n0 + bound_rvars_at_hole_scope Et) ↦ 2] ⨥
+                ((one n_hol rf ⨥ D3) ⊗ D6 ⊗ zero 1)).
+  2: eapply wf_par with
+      (G1 := (zero m_hol ⊗ G6))
+      (D1 := ((n_hol + (n0 + 1)) [r ↦ 1] ⨥
+              (n_hol + (n0 + 1)) [n0 + bound_rvars_at_hole_scope Et ↦ 2]) ⨥
+              (zero n_hol ⊗ D6 ⊗ zero 1)).
   3: apply wf_weaken_free_vars; eauto.
+  3: now rewrite lctxt_sum_app_dist, sum_zero_l, sum_zero_r.
+  (* FRAN: How to make this next rewrite cleaner? *)
+  3: rewrite <- (sum_assoc ((n_hol + (n0 + 1)) [r ↦ 1] ⨥ 
+                            (n_hol + (n0 + 1)) [n0 + bound_rvars_at_hole_scope Et ↦ 2])). 
+  3: rewrite <- (ctxt_app_assoc (zero n_hol)).
+  3: now rewrite lctxt_sum_app_dist, sum_zero_l, sum_zero_r, ctxt_app_assoc.
   (* 3: now rewrite sum_zero_l.
   3: reflexivity. *)
 
@@ -740,7 +749,7 @@ Proof.
     eapply H0. *)
     econstructor.
     3: now rewrite sum_zero_l.
-    3: reflexivity.
+    (* 3: reflexivity. *)
     + econstructor; eauto; try reflexivity; try lia.
       apply wf_hs_vars_correct in H2; lia.
     + admit.
@@ -748,6 +757,7 @@ Proof.
       destruct H0. clear H H1.
       rewrite (Nat.add_comm m0).
       apply H0. *)
+    +
 
 
 Qed.
