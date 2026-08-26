@@ -742,6 +742,26 @@ Qed.
 
 
 
+Ltac lia_destruct :=
+  repeat match goal with
+  | [ H: context[lt_dec ?R1 ?R2] |- _ ] => destruct (lt_dec R1 R2); try lia
+  end;
+  repeat match goal with
+  | [ H: context[Nat.eq_dec ?R1 ?R2] |- _ ] => destruct (Nat.eq_dec R1 R2); subst; try lia
+  end.
+
+Ltac lia_goal :=
+  repeat match goal with
+  | [ |- context[lt_dec ?R1 ?R2] ] => destruct (lt_dec R1 R2); try lia
+  | [ |- context[Nat.eq_dec ?R1 ?R2] ] => destruct (Nat.eq_dec R1 R2); try lia
+  end.
+
+Ltac solve_ctxt_eq :=
+  unfold ctxt_eq, ctxt_app, sum, one, delta, zero, flat_ctxt in *;
+  intros; lia_goal; lia_destruct.
+
+
+
 
 
 
@@ -2476,7 +2496,22 @@ Proof.
   intros x.
   unfold ctxt_app.
   destruct (lt_dec x n); auto.
-Qed.  
+Qed.
+
+Lemma ctxt_app_eq :
+  forall {X} n m (c1 c2 : ctxt n X)  (d1 d2 : ctxt m X),
+    c1 ≡[n] c2 ->
+    d1 ≡[m] d2 ->
+    (c1 ⊗ d1) ≡[n + m] (c2 ⊗ d2).
+Proof.
+  unfold ctxt_eq, ctxt_app; intros.
+  destruct (lt_dec x n).
+  - auto.
+  - apply H0; lia.
+Qed.
+
+
+
 
 Lemma sum_app_inv : forall n m (D1 D2 : lctxt (n + m)) (Da : lctxt n) (Db : lctxt m),
   (D1 ⨥ D2) = Da ⊗ Db ->

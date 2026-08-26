@@ -537,6 +537,7 @@ Proof.
 Qed.
 
 
+
 (* Splitting a hole scope EP with an accumulated Edeflam
     gives a predictable pair *)
 Lemma build_hs_correct_Edeflam : 
@@ -628,6 +629,26 @@ Qed.
 
 
 
+(*  Hole scopes are identities of hole_scope  *)
+Lemma hole_scope_id :
+  forall Et,
+    is_hole_scope_at_top Et = true ->
+    hole_scope Et = Et.
+Proof. intros; unfold hole_scope. now rewrite inv_hole_scope_at_top. Qed.
+
+(*  hole_scope does not depend on the bounds of outer scopes  *)
+Lemma hole_scope_change_bounds :
+  forall m2 n2 m1 n1 EP,
+    is_hole_scope_at_top_proc EP = false ->
+    hole_scope (Ebag m1 n1 EP) = hole_scope (Ebag m2 n2 EP).
+Proof. 
+  intros; unfold hole_scope, split_hole_scope.
+  apply build_not_hs_correct in H; dest_conj_disj_exist.
+  now repeat rewrite H1.
+Qed.
+
+
+
 (* hole_scope disregards everything above an Edeflam *)
 Lemma hole_scope_of_fill_Edeflam : 
   forall Et r Et', 
@@ -704,6 +725,27 @@ Proof.
     + generalize EP; EP_ind_unsafe IH EP; simpl; auto.
     + dest_conj_disj_exist.
       now repeat rewrite H3.
+Qed.
+
+
+
+(*  hole_scope after mutate_hole_scope is the same
+    as mutating the hole_scope *)
+Lemma hole_scope_mutate_hole_scope :
+  forall f,
+    (forall Et, is_hole_scope_at_top Et = is_hole_scope_at_top (f Et)) ->
+  forall Et,
+    hole_scope (mutate_hole_scope f Et) = f (hole_scope Et).
+Proof.
+  intros. unfold mutate_hole_scope.
+  destruct (is_hole_scope_at_top Et) eqn:HS.
+  - unfold hole_scope; specialize H with Et; rewrite HS in H.
+    now repeat rewrite inv_hole_scope_at_top.
+  - apply inv_hole_scope_not_at_top in HS; dest_conj_disj_exist.
+    rewrite H2; subst.
+    repeat rewrite hole_scope_of_fill_Edeflam.
+    specialize H with x0; rewrite H1 in H.
+    now repeat rewrite hole_scope_id.
 Qed.
 
 
@@ -787,7 +829,6 @@ Inductive wf_EC_term : forall (m n m_hol n_hol:nat),
     lctxt m_hol -> lctxt n_hol -> EC_term -> Prop :=
 | wf_Ebag :
   forall m n m' n' m_hol n_hol
-    (HN' : n' <= 1)
     (G : lctxt m) (D : lctxt n)
     (G_hol : lctxt m_hol) (D_hol : lctxt n_hol)
     (UG : forall x, x < m -> (G x) = 1)
@@ -886,25 +927,9 @@ Proof. repeat red; intros; subst. split; intros.
 
 
 
-(* Lemma wf_EC_weaken_hs_vars :
-      (forall m n m_hol n_hol G_hol D_hol Et,
-        wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
-        forall m_new n_new,
-        wf_EC_term m n (m_hol + m_new) (n_hol + n_new)
-            (G_hol ⊗ zero m_new) (D_hol ⊗ zero n_new) Et)
-  /\  (forall m n m_hol n_hol G D G_hol D_hol EP, 
-        wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP ->
-        forall m_new n_new,
-          (is_hole_scope_at_top_proc EP = true ->
-            wf_EC_proc (m + m_new) (n + n_new)
-                (m_hol + m_new) (n_hol + n_new)
-                (G ⊗ zero m_new) (D ⊗ zero n_new)
-                (G_hol ⊗ zero m_new) (D_hol ⊗ zero n_new) EP)
-      /\ (is_hole_scope_at_top_proc EP = false ->
-            wf_EC_proc m n (m_hol + m_new) (n_hol + n_new)
-                G D (G_hol ⊗ zero m_new) (D_hol ⊗ zero n_new) EP)). *)
 
-Lemma wf_EC_weaken_vars_hs :
+
+(* Lemma wf_EC_weaken_vars_hs :
       (forall m n m_hol n_hol G_hol D_hol Et,
         wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
         forall m_new n_new,
@@ -941,7 +966,7 @@ Proof.
       1: now rewrite HG.
       1: now rewrite HD.
     + econstructor; eauto. now apply H.
-Admitted.
+Admitted. *)
 
 
 
@@ -1110,7 +1135,7 @@ Proof. apply max_rvar_hole_EC_wf. Qed.
 
 
 
-(* A wf hole scope has equal hole and scope variable bounds. *)
+(*  A wf hole scope has equal hole and scope variable bounds.  *)
 Lemma wf_hs_var_bounds_eq :
     (forall m n m_hol n_hol G_hol D_hol Et,
       wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
@@ -1141,8 +1166,69 @@ Proof. apply wf_hs_var_bounds_eq. Qed.
 
 
 
-(* The context for a hole scope includes the resources 
-    of the hole context *)
+(*  G_hol always maps free fvars to 0.  *)
+Lemma wf_hs_G_hol_bounds :
+    (forall m n m_hol n_hol G_hol D_hol Et,
+      wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
+    forall x,
+      bound_fvars_at_hole_scope Et <= x < m_hol ->
+      G_hol x = 0)
+/\  (forall m n m_hol n_hol G D G_hol D_hol EP,
+      wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP ->
+      (is_hole_scope_at_top_proc EP = true ->
+        forall x,
+          x < m_hol ->
+          G_hol x <= G x)
+  /\  (is_hole_scope_at_top_proc EP = false ->
+        forall x,
+          bound_fvars_at_hole_scope (Ebag 0 0 EP) <= x < m_hol ->
+          G_hol x = 0)).
+Proof.
+  apply wf_EC_ind; unfold bound_fvars_at_hole_scope, apply_at_hole_scope;
+      simpl; intros; dest_conj_disj_exist.
+  - destruct (is_hole_scope_at_top_proc EP) eqn:HS.
+    + clear H2; specialize H with x. 
+      rewrite hole_scope_id in H0; auto; simpl in H0.
+      rewrite ctxt_app_r in H; auto.
+      unfold zero, flat_ctxt in H. lia.
+    + clear H; apply H2; auto. 
+      rewrite (hole_scope_change_bounds m n); auto.
+  - split; try discriminate; intros.
+    unfold ctxt_eq in HG. specialize HG with x; lia.
+  - split; try discriminate; intros.
+    apply H.
+    replace (Ebag 0 0 (Edeflam r Et)) with 
+        (Ebag 0 0 Ehol <=<[ Edeflam r Et ]) in H1 by auto.
+    now rewrite hole_scope_of_fill_Edeflam in H1.
+  - split; intros.
+    + clear H0; specialize H with x.
+      unfold ctxt_eq in HG. specialize HG with x.
+      rewrite sum_correct in HG.
+      apply wf_hs_var_bounds_eq in WFP1; auto;
+          dest_conj_disj_exist; subst.
+      apply H in H1; lia.
+    + clear H; specialize H0 with x.
+      replace (Ebag 0 0 (Epar EP P)) with 
+        (Ebag 0 0 Ehol <=<[ Epar EP P ]) in H2 by auto.
+      rewrite hole_scope_of_fill_Epar with (m := 0) (n := 0) in H2; auto. 
+Qed.
+
+(*  All G_hol end in zero.  *)
+Lemma wf_hs_split_G_hol :
+  forall m n m_free m_bound n_hol G_hol D_hol Et,
+    m_bound = bound_fvars_at_hole_scope Et ->
+    wf_EC_term m n (m_bound + m_free) n_hol G_hol D_hol Et ->
+  exists G,
+    G_hol ≡[m_bound + m_free] G ⊗ zero (m_free).
+Proof.
+  intros. exists G_hol. solve_ctxt_eq.
+  eapply wf_hs_G_hol_bounds in H0; eauto; lia.
+Qed.
+
+
+
+(*  The context for a hole scope includes the resources 
+    of the hole context  *)
 Lemma min_rvar_hs_EC_wf :
   forall EP m n m_hol n_hol G D G_hol D_hol r, 
     wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP ->

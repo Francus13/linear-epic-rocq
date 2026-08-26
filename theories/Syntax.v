@@ -506,7 +506,6 @@ Unset Elimination Schemes.
 Inductive wf_term : forall (m n:nat), term -> Prop :=
 | wf_bag :
   forall m n m' n'
-    (HN' : n' <= 1)
     (G : lctxt m) (D : lctxt n)
     (UG : forall x, x < m -> (G x) = 1)
     (UD : forall x, x < n -> (D x) = 2 \/ (D x) = 0)
@@ -1143,7 +1142,6 @@ Lemma rename_fvar_id_oper :
  forall m n (o:oper), ws_oper m n o -> rename_fvar_oper (ren_id m) o = o.
 Proof. intros; eapply rename_fvar_id_tpo; eauto. Qed.
   
-
 
 
 (* Renaming preserves well-formedness *)

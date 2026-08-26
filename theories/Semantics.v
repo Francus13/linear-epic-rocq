@@ -17,23 +17,22 @@ Local Open Scope bool_scope.
 
 
 
+
+(* Useful tactics *)
+
+Ltac destr_inv_fill_wf H := apply inv_fill_wf in H;
+  destruct H as (m_hol & n_hol & G_hol & D_hol & H1 & H2).
+
+Ltac rewrite_ctxt_equivs :=
+repeat match goal with
+| H : ?C1 ≡[ ?n ] ?C2 |- _ => rewrite H in *; clear H
+end; repeat match goal with
+| H : ?C1 ≡[ ?n ] ?C2 |- _ => rewrite <- H in *; clear H
+end.
+
+
+
 (* Extending Renamings and Contexts ---------------------------------------------------------- *)
-
-Ltac lia_destruct :=
-  repeat match goal with
-  | [ H: context[lt_dec ?R1 ?R2] |- _ ] => destruct (lt_dec R1 R2); try lia
-  end;
-  repeat match goal with
-  | [ H: context[Nat.eq_dec ?R1 ?R2] |- _ ] => destruct (Nat.eq_dec R1 R2); subst; try lia
-  end.
-
-Ltac lia_goal :=
-  repeat match goal with
-  | [ |- context[lt_dec ?R1 ?R2] ] => destruct (lt_dec R1 R2); try lia
-  | [ |- context[Nat.eq_dec ?R1 ?R2] ] => destruct (Nat.eq_dec R1 R2); try lia
-  end.
-
-
 
 (* FRAN: This is inconsistent in canonicity with ren_id,
     since it weakens variables out of scope.
@@ -118,43 +117,25 @@ Lemma rename_var_wf :
     x < n_scope ->
     y < n_scope ->
     wf_ren (rename_var n_scope n x y).
-Proof.
-  unfold wf_ren, rename_var; intros; split.
-  all: destruct (lt_dec x n); destruct (lt_dec y n); 
-        destruct (Nat.eq_dec x0 x); destruct (Nat.eq_dec x0 y); lia.
-Qed.
+Proof. unfold wf_ren, rename_var; intros; split; lia_goal. Qed.
 
 Lemma rename_var_correct :
   forall n_scope n x y,
     x < n \/ y < n ->
     rename_var n_scope n x y x = rename_var n_scope n x y y.
-Proof.
-  intros. unfold rename_var.
-  destruct (lt_dec x n); destruct (lt_dec y n);
-      destruct (Nat.eq_dec x x); destruct (Nat.eq_dec y x);
-      destruct (Nat.eq_dec x y); destruct (Nat.eq_dec y y);
-      lia.
-Qed.
+Proof. intros; unfold rename_var; lia_goal. Qed.
 
 Lemma rename_var_correct_y :
   forall n_scope n x y,
     x < n ->
     rename_var n_scope n x y y = y.
-Proof.
-  intros. unfold rename_var.
-  destruct (lt_dec x n); try lia.
-  destruct (Nat.eq_dec y x); auto.
-Qed.
+Proof. intros; unfold rename_var; lia_goal. Qed.
 
 Lemma rename_var_correct_x :
   forall n_scope n x y,
     ~ (x < n) ->
     rename_var n_scope n x y x = x.
-Proof.
-  intros. unfold rename_var.
-  destruct (lt_dec x n); try lia.
-  destruct (lt_dec y n); destruct (Nat.eq_dec x y); auto.
-Qed.
+Proof. intros; unfold rename_var; lia_goal. Qed.
 
 Lemma rename_var_wf_hs_fun :
   forall Et m_hol n_hol G_hol x y,
@@ -358,25 +339,183 @@ Definition add_rvars_hole_scope n_new : EC_term -> EC_term :=
 
 
 
-Lemma add_fvars_wf_hs_fun :
-  forall m_new Et m_hol n_hol G_hol D_hol,
-    wf_hs_fun (add_fvars m_new) (hole_scope Et)
-        m_hol n_hol G_hol D_hol
-        (m_hol + m_new) n_hol (G_hol ⊗ zero m_new) D_hol.
+(* Adding vars preserves well-formedness *)
+Lemma add_fvars_rename :
+    (forall t m m_new m_free n,
+      wf_term (m + m_free) n t ->
+      wf_term (m + m_new + m_free) n
+          (rename_fvar_term (ren_shift m (weaken_ren 0 m_new)) t))
+/\  (forall P m m_new m_free n G G_free D,
+      wf_proc (m + m_free) n (@ctxt_app _ m m_free G G_free) D P ->
+      wf_proc (m + m_new + m_free) n (G ⊗ zero m_new ⊗ G_free) D
+          (rename_fvar_proc (ren_shift m (weaken_ren 0 m_new)) P))
+/\  (forall o m m_new m_free n G G_free D,
+      wf_oper (m + m_free) n (@ctxt_app _ m m_free G G_free) D o ->
+      wf_oper (m + m_new + m_free) n (G ⊗ zero m_new ⊗ G_free) D
+          (rename_fvar_oper (ren_shift m (weaken_ren 0 m_new)) o)).
 Proof.
+  apply tpo_ind; simpl; intros.
+  all: try (inversion H1; clear H1); try (inversion H0; clear H0); 
+          try (inversion H; clear H); existT_eq; subst.
+  5: apply sum_app_inv_ctxt in HG; dest_conj_disj_exist; rewrite_ctxt_equivs.
+  all: econstructor; eauto.
+  all: try reflexivity.
+  all: try solve [
+    rewrite <- app_zero in HG;
+    assert (HG' := HG); apply ctxt_app_inv_l_eq in HG;
+        apply ctxt_app_inv_r_eq in HG'; rewrite HG, HG';
+    now repeat rewrite app_zero
+  ].
+  all: try solve [
+    unfold ren_shift, ren_id, weaken_ren, weaken_tail_ren;
+    solve_ctxt_eq
+  ].
 
-Admitted.
+  (* Ebag Process wf *)
+  - repeat rewrite <- app_zero, ctxt_app_assoc;
+        rewrite ren_shift_combine;
+        repeat rewrite Nat.add_assoc in *.
+    specialize H with (m + m0) m_new m_free (n + n0)
+        (G ⊗ zero m0) (zero m_free) (D ⊗ flat_ctxt 1 n0).
+        repeat rewrite Nat.add_0_r in *;
+        apply H; clear H.
+    now rewrite <- ctxt_app_assoc, app_zero.
+
+  (* Bng base case for renaming *)
+  - clear HD; unfold ren_shift, weaken_ren, ren_id, weaken_tail_ren in *.
+    solve_ctxt_eq; subst.
+    1, 2, 3: specialize HG with x; solve_ctxt_eq.
+    1, 3: replace (x - (m + m_new)) with (x - m_new - m) by lia;
+          specialize HG with (x - m_new); solve_ctxt_eq.
+    replace (m + (f - m + m_new) - (m + m_new)) with (f - m) by lia.
+      specialize HG with f; solve_ctxt_eq.
+Qed.
+
+Lemma add_rvars_rename :
+    (forall (t : term), True)
+/\  (forall P m n n_new n_free G D D_free,
+      wf_proc m (n + n_free) G (@ctxt_app _ n n_free D D_free) P ->
+      wf_proc m (n + n_new + n_free) G (D ⊗ zero n_new ⊗ D_free)
+          (rename_rvar_proc (ren_shift n (weaken_ren 0 n_new)) P))
+/\  (forall o m n n_new n_free G D D_free,
+      wf_oper m (n + n_free) G (@ctxt_app _ n n_free D D_free) o ->
+      wf_oper m (n + n_new + n_free) G (D ⊗ zero n_new ⊗ D_free)
+          (rename_rvar_oper (ren_shift n (weaken_ren 0 n_new)) o)).
+Proof.
+  apply tpo_ind; simpl; intros.
+  all: try (inversion H1; clear H1); try (inversion H0; clear H0); 
+          try (inversion H; clear H); existT_eq; subst.
+  all: try (apply sum_app_inv_ctxt in HD; dest_conj_disj_exist; rewrite_ctxt_equivs).
+  all: econstructor; eauto.
+  all: try reflexivity.
+  all: try solve [
+    rewrite <- app_zero in HD;
+    assert (HD' := HD); apply ctxt_app_inv_l_eq in HD;
+        apply ctxt_app_inv_r_eq in HD'; rewrite HD, HD';
+    now repeat rewrite app_zero
+  ].
+  all:
+    try rename HD into H;
+    unfold ren_shift, ren_id, weaken_ren, weaken_tail_ren in *; 
+    solve_ctxt_eq; subst;
+    try rename x into x3;
+    try solve [try specialize H with x3;
+                try specialize H0 with x3; solve_ctxt_eq];
+    try solve [replace (x3 - (n + n_new)) with (x3 - n_new - n) by lia;
+        try specialize H with (x3 - n_new);
+        try specialize H0 with (x3 - n_new); solve_ctxt_eq];
+    try solve [ try rename r1 into r;
+        replace (n + (r - n + n_new) - (n + n_new)) with (r - n) by lia;
+        try specialize H with r;
+        try specialize H0 with r; solve_ctxt_eq];
+    try solve [ try rename r2 into r;
+        replace (n + (r - n + n_new) - (n + n_new)) with (r - n) by lia;
+        try specialize H with r;
+        try specialize H0 with r; solve_ctxt_eq].
+Qed.
+
+
+
+(* Adding vars to hs transforms hs wf *)
+Lemma add_fvars_wf_hs_fun :
+  forall m_new (G_new : lctxt m_new) m_free m n EP n_hol G D_hol,
+    (forall x, x < m_new -> G_new x = 1) ->
+    wf_hs_fun (add_fvars m_new) (Ebag m n EP)
+        (m + m_free) n_hol (G ⊗ zero m_free) D_hol
+        (m + m_new + m_free) n_hol (G ⊗ G_new ⊗ zero m_free) D_hol.
+Proof.
+  unfold wf_hs_fun; intros.
+  inversion H1; existT_eq; subst; clear H1.
+  assert (m0 = m_free) by 
+      (apply wf_hs_var_bounds_eq_proc in WFP; auto; lia); subst.
+  unfold add_fvars; simpl.
+  eapply wf_Ebag with (G := G0 ⊗ G_new); eauto.
+  - intros. destruct (lt_dec x m).
+    + rewrite ctxt_app_l; eauto.
+    + rewrite ctxt_app_r; try lia. apply H; lia.
+  - clear UG UD H; generalize dependent WFP; generalize dependent G0;
+        generalize (@ctxt_app _ n n0 D (flat_ctxt 1 n0)) as D'.
+    
+    induction EP; simpl; intros; inversion WFP; existT_eq; subst; 
+        rewrite HD in *; clear HD WFP.
+    + econstructor; auto; try reflexivity.
+      apply ctxt_app_inv_l_eq in HG; now rewrite HG.
+    + discriminate.
+    + apply sum_app_inv_ctxt in HG; dest_conj_disj_exist.
+      assert (H4 := H3); apply sum_zero_inv_l_eq in H3;
+          apply sum_zero_inv_r_eq in H4.
+      rewrite_ctxt_equivs; clear x1 x2.
+      econstructor; try reflexivity.
+      * apply IHEP; eauto.
+      * apply add_fvars_rename; eauto.
+      * repeat rewrite lctxt_sum_app_dist; 
+        now repeat rewrite sum_zero_r.
+Qed.
 
 Lemma add_rvars_wf_hs_fun :
-  forall n_new Et m_hol n_hol G_hol D_hol,
-    wf_hs_fun (add_rvars n_new) (hole_scope Et)
-        m_hol n_hol G_hol D_hol
-        m_hol (n_hol + n_new) G_hol (D_hol ⊗ zero n_new).
+  forall n_new (D_new : lctxt n_new) n_free m n EP m_hol G_hol D,
+    (forall x, x < n_new -> D_new x = 2 \/ D_new x = 0) ->
+    wf_hs_fun (add_rvars n_new) (Ebag m n EP)
+        m_hol (n + n_free) G_hol (D ⊗ zero n_free)
+        m_hol (n + n_new + n_free) G_hol (D ⊗ D_new ⊗ zero n_free).
 Proof.
+  unfold wf_hs_fun; intros.
+  inversion H1; existT_eq; subst; clear H1.
+  assert (n0 = n_free) by 
+      (apply wf_hs_var_bounds_eq_proc in WFP; auto; lia); subst.
+  unfold add_rvars; simpl.
+  eapply wf_Ebag with (D := D0 ⊗ D_new); eauto.
+  - intros. destruct (lt_dec x n).
+    + rewrite ctxt_app_l; eauto.
+    + rewrite ctxt_app_r; try lia. apply H; lia.
+  - clear UG UD H. generalize dependent WFP; generalize dependent D0;
+        generalize dependent (flat_ctxt 1 n_free);
+        generalize (@ctxt_app _ m m0 G (zero m0)) as G'.
+    
+    induction EP; simpl; intros; inversion WFP; existT_eq; subst; 
+        rewrite HG in *; clear HG WFP.
+    + econstructor; auto; try reflexivity.
+      assert (HD' := HD); apply ctxt_app_inv_l_eq in HD;
+          apply ctxt_app_inv_r_eq in HD'; now rewrite HD, HD'.
+    + discriminate.
+    + apply sum_app_inv_ctxt in HD; dest_conj_disj_exist.
+      rewrite_ctxt_equivs.
+      econstructor; try reflexivity.
+      * apply IHEP; eauto.
+      * apply add_rvars_rename; eauto.
+      * repeat rewrite lctxt_sum_app_dist; 
+        now repeat rewrite sum_zero_r.
+Qed.
 
-Admitted.
 
 
+(* Gives the new variable after an application 
+    If x is one of the bound vars in the applicaiton scope
+    (i.e. x < bound) then x is unchanged.
+    Otherwise, x is weakened by the number of added vars
+    (those bound by the function body, given by body) *)
+Definition ready_var (x bound body : nat) : nat :=
+  x + (if lt_dec x bound then 0 else body).
 
 (* Renames rvars in a lambda body for its application
     - n rvars are bound in the lambda body
@@ -385,9 +524,9 @@ Admitted.
 Definition ready_body_rvar (n_app n r_arg : nat) (P : proc) : proc :=
     (* Weaken the scope : [n + 1] -> [n_app + n + 1] *)
   let P1 := rename_rvar_proc (weaken_ren (n + 1) n_app) P in
-    (* Equate the single free rvar (i.e. the parameter) with the argument r_arg *)
-  let n_total := n + 1 + n_app in
-  par (req (n + n_app) r_arg) P1.
+    (* Equate the single free rvar (i.e. the parameter) with the argument rvar *)
+  let new_arg := ready_var r_arg n_app n in
+  par (req (n + n_app) new_arg) P1.
 
 (* Renames fvars in a lambda body for an application,
    for when the lambda and application are in the same scope
@@ -603,15 +742,6 @@ Inductive step : term -> term -> Prop :=
 
 
 
-(* Useful tactics for preservation *)
-
-Ltac destr_inv_fill_wf H := apply inv_fill_wf in H;
-  destruct H as (m_hol & n_hol & G_hol & D_hol & H1 & H2).
-
-Ltac rewrite_ctxt_equivs :=
-repeat match goal with
-| H : ?C1 ≡[ ?n ] ?C2 |- _ => rewrite H in *; clear H
-end.
 
 
 
@@ -711,20 +841,37 @@ Proof.
       clear H1 WFP1; rewrite_ctxt_equivs.
   rewrite sum_zero_l in H2.
   destruct t; simpl in *.
-  inversion WFP2; inversion WFP1; inversion WFO; inversion WFT; 
-      existT_eq; subst; rewrite_ctxt_equivs; rewrite sum_zero_l, sum_zero_r in *;
-      clear WFP1 WFP0 WFO WFT HN' G0 D0 G1 D1 G2 D2.
+  inversion WFP2; inversion WFP1; inversion WFP0; 
+      inversion WFO; inversion WFO0; inversion WFT; 
+      existT_eq; subst; rewrite_ctxt_equivs; 
+      rewrite sum_zero_l, sum_zero_r in *;
+      (*TODO *)
+      clear WFP1 WFP0 WFO WFO0 WFT G0 D0 G1 D1 G2 D2.
+
+  destruct (hole_scope Et) eqn:HS.
+  remember (m_hol - m1) as m_free.
+  remember (n_hol - n1) as n_free.
+  assert (m_hol = (m1 + m_free) /\ n_hol = (n1 + n_free)).
+  {
+    apply wf_hs_vars_correct in H2.
+    unfold bound_fvars_at_hole_scope, bound_rvars_at_hole_scope,
+        apply_at_hole_scope in H2.
+    rewrite HS in H2; simpl in H2; lia.
+  }
+  clear Heqm_free Heqn_free; destruct H; subst.
+
+  remember (ready_var r m1 m0) as r_new.
   eapply fill_wf_pres_term with 
-      (m_hol := m_hol + m0) (n_hol := n_hol + (n0 + 1))
+      (m_hol := m1 + m0 + m_free) (n_hol := n1 + (n0 + 1) + n_free)
       (G_hol := G3 ⊗ G6) 
-      (D_hol := (n_hol + (n0 + 1)) [r ↦ 1] ⨥
-                (n_hol + (n0 + 1)) [(n0 + bound_rvars_at_hole_scope Et) ↦ 2] ⨥
-                ((one n_hol rf ⨥ D3) ⊗ D6 ⊗ zero 1)).
+      (D_hol := (n1 + n_free + (n0 + 1)) [r_new ↦ 1] ⨥
+                (n1 + n_free + (n0 + 1)) [(n0 + bound_rvars_at_hole_scope Et) ↦ 2] ⨥
+                ((one (n1 + n_free) rf ⨥ D3) ⊗ D6 ⊗ zero 1)).
   2: eapply wf_par with
-      (G1 := (zero m_hol ⊗ G6))
-      (D1 := ((n_hol + (n0 + 1)) [r ↦ 1] ⨥
-              (n_hol + (n0 + 1)) [n0 + bound_rvars_at_hole_scope Et ↦ 2]) ⨥
-              (zero n_hol ⊗ D6 ⊗ zero 1)).
+      (G1 := (zero m1 + m_free ⊗ G6))
+      (D1 := ((n1 + n_free + (n0 + 1)) [rf ↦ 1] ⨥
+              (n1 + n_free + (n0 + 1)) [n0 + bound_rvars_at_hole_scope Et ↦ 2]) ⨥
+              (zero (n1 + n_free) ⊗ D6 ⊗ zero 1)).
   3: apply wf_weaken_free_vars; eauto.
   3: now rewrite lctxt_sum_app_dist, sum_zero_l, sum_zero_r.
   (* FRAN: How to make this next rewrite cleaner? *)
@@ -732,13 +879,50 @@ Proof.
                             (n_hol + (n0 + 1)) [n0 + bound_rvars_at_hole_scope Et ↦ 2])). 
   3: rewrite <- (ctxt_app_assoc (zero n_hol)).
   3: now rewrite lctxt_sum_app_dist, sum_zero_l, sum_zero_r, ctxt_app_assoc.
-  (* 3: now rewrite sum_zero_l.
-  3: reflexivity. *)
 
   - unfold Et_shifted; clear Et_shifted new_body.
     unfold shift_hs_by_term_vars; simpl.
+
+    assert (H := H2); apply wf_hs_split_G_hol in H;
+        destruct H as [G_bound ?].
+    2: unfold bound_fvars_at_hole_scope, apply_at_hole_scope;
+        now rewrite HS.
+    rewrite H in *; clear H.
+
     do 2 (try eapply mutate_hole_scope_wf); eauto.
-    * apply add_fvars_wf_hs_fun.
+    * destruct (hole_scope Et); rewrite HS; clear HS.
+      apply add_fvars_wf_hs_fun; eauto.
+    * assert (exists EP0,
+        hole_scope (add_fvars_hole_scope m0 Et) = Ebag (m1 + m0) n1 EP0).
+      {
+        unfold add_fvars_hole_scope. 
+        rewrite hole_scope_mutate_hole_scope, HS.
+        1: cbn; eauto.
+        intros; destruct Et0; simpl.
+        generalize dependent EP0.
+        EP_ind_unsafe IH EP0; auto.
+      }
+
+      destruct H; rewrite H.
+      (* repeat rewrite Nat.add_assoc. *)
+      unfold wf_hs_fun; intros.
+     
+      remember add_rvars_wf_hs_fun; clear Heqw.
+      unfold wf_hs_fun in *; intros.
+      unfold bound_rvars_at_hole_scope, apply_at_hole_scope.
+      rewrite HS; simpl.
+
+
+      (* assert (H1 := H0); apply wf_hs_var_bounds_eq in H1;
+          destruct H1; subst; simpl in *; auto. *)
+      (* replace (m1 + m2 + m0) with (m1 + m0 + m2) by lia.
+      inversion H0; existT_eq; subst. *)
+
+      eapply w; clear w.
+      admit. auto.
+      rewrite H in H1. apply H1.
+
+      
     * admit.
       (* apply add_rvars_wf_hs_fun. *)
   - unfold new_body; clear Et_shifted new_body.
