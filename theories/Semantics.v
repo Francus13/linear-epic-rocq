@@ -845,8 +845,9 @@ Proof.
       inversion WFO; inversion WFO0; inversion WFT; 
       existT_eq; subst; rewrite_ctxt_equivs; 
       rewrite sum_zero_l, sum_zero_r in *;
-      (*TODO *)
-      clear WFP1 WFP0 WFO WFO0 WFT G0 D0 G1 D1 G2 D2.
+      unfold one in H2 at 3 4; unfold one in WFP2 at 2 3; 
+          rewrite delta_sum in *; simpl in *;
+      clear WFP1 WFP0 WFO WFO0 WFT G0 D0 G1 D1 G2 D2 G3 D3.
 
   destruct (hole_scope Et) eqn:HS.
   remember (m_hol - m1) as m_free.
@@ -862,23 +863,35 @@ Proof.
 
   remember (ready_var r m1 m0) as r_new.
   eapply fill_wf_pres_term with 
-      (m_hol := m1 + m0 + m_free) (n_hol := n1 + (n0 + 1) + n_free)
-      (G_hol := G3 ⊗ G6) 
-      (D_hol := (n1 + n_free + (n0 + 1)) [r_new ↦ 1] ⨥
-                (n1 + n_free + (n0 + 1)) [(n0 + bound_rvars_at_hole_scope Et) ↦ 2] ⨥
-                ((one (n1 + n_free) rf ⨥ D3) ⊗ D6 ⊗ zero 1)).
+      (m_hol := m1 + m0 + m_free)
+      (n_hol := n1 + (n0 + 1) + n_free)
+      (G_hol := (m1 + m0 + m_free) [f ↦ 1] ⨥
+                (zero m1 ⊗ G8 ⊗ zero m_free))
+      (D_hol := (n1 + (n0 + 1) + n_free) [r_new ↦ 1] ⨥
+                (n1 + (n0 + 1) + n_free) [rf ↦ 2] ⨥
+                (zero n1 ⊗ D8 ⊗ flat_ctxt 2 1 ⊗ zero n_free)).
+  (* Split wf of the new body and the function *)
   2: eapply wf_par with
-      (G1 := (zero m1 + m_free ⊗ G6))
-      (D1 := ((n1 + n_free + (n0 + 1)) [rf ↦ 1] ⨥
-              (n1 + n_free + (n0 + 1)) [n0 + bound_rvars_at_hole_scope Et ↦ 2]) ⨥
-              (zero (n1 + n_free) ⊗ D6 ⊗ zero 1)).
-  3: apply wf_weaken_free_vars; eauto.
-  3: now rewrite lctxt_sum_app_dist, sum_zero_l, sum_zero_r.
-  (* FRAN: How to make this next rewrite cleaner? *)
-  3: rewrite <- (sum_assoc ((n_hol + (n0 + 1)) [r ↦ 1] ⨥ 
-                            (n_hol + (n0 + 1)) [n0 + bound_rvars_at_hole_scope Et ↦ 2])). 
-  3: rewrite <- (ctxt_app_assoc (zero n_hol)).
-  3: now rewrite lctxt_sum_app_dist, sum_zero_l, sum_zero_r, ctxt_app_assoc.
+      (G1 := zero m1 ⊗ G8 ⊗ zero m_free)
+      (D1 := (n1 + (n0 + 1) + n_free) [r_new ↦ 1] ⨥
+                (zero n1 ⊗ D8 ⊗ flat_ctxt 2 1 ⊗ zero n_free)).
+  (* Function definition and naming are well-formed (from assumption) *)
+  3: replace (m1 + m0 + m_free) with (m1 + m_free + m0) by lia;
+        replace (n1 + (n0 + 1) + n_free) with (n1 + n_free + (n0 + 1)) by lia;
+        apply wf_weaken_free_vars; eauto.
+  (* G = G1 + G2 *)
+  3: unfold one; rewrite sum_commutative;
+        rewrite delta_app_zero_r; auto;
+        assert ((m1 + m0 + m_free) [f ↦ 1] = (m1 + m_free + m0) [f ↦ 1]) as H
+            by (now replace (m1 + m_free + m0) with (m1 + m0 + m_free) by lia);
+        try now rewrite H.
+  (* D = D1 + D2 *)
+  3: rewrite sum_commutative, sum_assoc, 
+            (sum_commutative _ (n1 + (n0 + 1) + n_free) [r_new ↦ 1]);
+        rewrite delta_app_zero_r; auto;
+        assert ((n1 + (n0 + 1) + n_free) [rf ↦ 2] = (n1 + n_free + (n0 + 1)) [rf ↦ 2]) as H
+            by (now replace (n1 + n_free + (n0 + 1)) with (n1 + (n0 + 1) + n_free) by lia);
+        try now rewrite H.
 
   - unfold Et_shifted; clear Et_shifted new_body.
     unfold shift_hs_by_term_vars; simpl.
@@ -908,9 +921,7 @@ Proof.
       unfold wf_hs_fun; intros.
      
       remember add_rvars_wf_hs_fun; clear Heqw.
-      unfold wf_hs_fun in *; intros.
-      unfold bound_rvars_at_hole_scope, apply_at_hole_scope.
-      rewrite HS; simpl.
+      unfold wf_hs_fun in w.
 
 
       (* assert (H1 := H0); apply wf_hs_var_bounds_eq in H1;
