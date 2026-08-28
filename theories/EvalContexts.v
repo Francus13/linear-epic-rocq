@@ -929,45 +929,6 @@ Proof. repeat red; intros; subst. split; intros.
 
 
 
-(* Lemma wf_EC_weaken_vars_hs :
-      (forall m n m_hol n_hol G_hol D_hol Et,
-        wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
-        forall m_new n_new,
-        wf_EC_term m n (m_hol + m_new) (n_hol + n_new)
-            (G_hol ⊗ zero m_new) (D_hol ⊗ zero n_new) Et)
-  /\  (forall m n m_hol n_hol G D G_hol D_hol EP, 
-        wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP ->
-        forall m_new n_new,
-          (is_hole_scope_at_top_proc EP = true ->
-            wf_EC_proc (m + m_new) (n + n_new)
-                (m_hol + m_new) (n_hol + n_new)
-                (G ⊗ zero m_new) (D ⊗ zero n_new)
-                (G_hol ⊗ zero m_new) (D_hol ⊗ zero n_new) EP)
-      /\ (is_hole_scope_at_top_proc EP = false ->
-            wf_EC_proc m n (m_hol + m_new) (n_hol + n_new)
-                G D (G_hol ⊗ zero m_new) (D_hol ⊗ zero n_new) EP)).
-Proof.
-  apply wf_EC_ind; simpl; intros.
-  (* Ebag *)
-  - econstructor; eauto.
-    destruct (H m_new n_new); clear H.
-    destruct (is_hole_scope_at_top_proc EP) eqn:HS.
-    + clear H1. admit.
-    + auto.
-  - split; intros; try discriminate; clear H.
-    econstructor; try rewrite HG; try rewrite HD; reflexivity.
-  - split; intros; try discriminate; clear H0.
-    econstructor; auto.
-  - split; intros.
-    + econstructor.
-      1: now apply H.
-      1: eapply wf_weaken_free_vars; eauto.
-      all: rewrite sum_app_zero.
-      1: now rewrite HG.
-      1: now rewrite HD.
-    + econstructor; eauto. now apply H.
-Admitted. *)
-
 
 
 (* Filling an EC preserves well-formedness *)
@@ -1096,6 +1057,10 @@ Qed.
 
 
 
+
+
+
+
 (* The rvar hole context has a maximum binding of 2 *)
 Lemma max_rvar_hole_EC_wf :
       (forall m n m_hol n_hol G_hol D_hol Et,
@@ -1214,7 +1179,7 @@ Proof.
 Qed.
 
 (*  All G_hol end in zero.  *)
-Lemma wf_hs_split_G_hol :
+(* Lemma wf_hs_split_G_hol :
   forall m n m_free m_bound n_hol G_hol D_hol Et,
     m_bound = bound_fvars_at_hole_scope Et ->
     wf_EC_term m n (m_bound + m_free) n_hol G_hol D_hol Et ->
@@ -1223,12 +1188,29 @@ Lemma wf_hs_split_G_hol :
 Proof.
   intros. exists G_hol. solve_ctxt_eq.
   eapply wf_hs_G_hol_bounds in H0; eauto; lia.
-Qed.
+Qed. *)
 
 
 
 (*  The context for a hole scope includes the resources 
     of the hole context  *)
+Lemma min_fvar_hs_EC_wf :
+  forall EP m n m_hol n_hol G D G_hol D_hol f, 
+    wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP ->
+    is_hole_scope_at_top_proc EP = true ->
+    f < m_hol ->
+    G f >= G_hol f.
+Proof.
+  induction EP; simpl; intros; inversion H; existT_eq; subst.
+  - unfold ctxt_eq in HG. rewrite HG; auto.
+  - discriminate.
+  - apply wf_hs_var_bounds_eq in H; auto.
+    destruct H; subst.
+    unfold ctxt_eq in HG. rewrite HG; auto.
+    eapply IHEP in WFP1; eauto.
+    rewrite sum_correct; lia.
+Qed.
+
 Lemma min_rvar_hs_EC_wf :
   forall EP m n m_hol n_hol G D G_hol D_hol r, 
     wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP ->
@@ -1244,6 +1226,74 @@ Proof.
     unfold ctxt_eq in HD. rewrite HD; auto.
     eapply IHEP in WFP1; eauto.
     rewrite sum_correct; lia.
+Qed.
+
+
+
+Lemma fvar_bound_hs :
+    (forall m n m_hol n_hol G_hol D_hol Et,
+      wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
+      forall f,
+        f < m_hol ->
+        G_hol f = 1 ->
+        f < bound_fvars_at_hole_scope Et)
+/\  (forall m n m_hol n_hol G D G_hol D_hol EP, 
+      wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP ->
+      is_hole_scope_at_top_proc EP = false ->
+      forall f,
+        f < m_hol ->
+        G_hol f = 1 ->
+        f < bound_fvars_at_hole_scope (Ebag 0 0 EP)).
+Proof.
+  unfold bound_fvars_at_hole_scope, apply_at_hole_scope.
+  apply wf_EC_ind; simpl; intros.
+  - destruct (is_hole_scope_at_top_proc EP) eqn:HS.
+    + rewrite hole_scope_id; auto; simpl.
+      eapply min_fvar_hs_EC_wf in WFP; eauto.
+      rewrite H1 in WFP; clear H1.
+      destruct (lt_dec f m); auto.
+      unfold zero, flat_ctxt in WFP; rewrite ctxt_app_r in WFP; lia.
+    + rewrite (hole_scope_change_bounds 0 0); auto.
+  - discriminate.
+  - replace (Ebag 0 0 (Edeflam r Et)) with 
+        (Ebag 0 0 Ehol <=<[ Edeflam r Et ]) by auto.
+    rewrite hole_scope_of_fill_Edeflam; auto.
+  - replace (Ebag 0 0 (Epar EP P)) with 
+        (Ebag 0 0 Ehol <=<[ Epar EP P ]) by auto.
+    rewrite hole_scope_of_fill_Epar with (m := 0) (n := 0); auto. 
+Qed.
+
+Lemma rvar_bound_hs :
+    (forall m n m_hol n_hol G_hol D_hol Et,
+      wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
+      forall r,
+        r < n_hol ->
+        D_hol r = 2 ->
+        r < bound_rvars_at_hole_scope Et)
+/\  (forall m n m_hol n_hol G D G_hol D_hol EP, 
+      wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP ->
+      is_hole_scope_at_top_proc EP = false ->
+      forall r,
+        r < n_hol ->
+        D_hol r = 2 ->
+        r < bound_rvars_at_hole_scope (Ebag 0 0 EP)).
+Proof.
+  unfold bound_rvars_at_hole_scope, apply_at_hole_scope.
+  apply wf_EC_ind; simpl; intros.
+  - destruct (is_hole_scope_at_top_proc EP) eqn:HS.
+    + rewrite hole_scope_id; auto; simpl.
+      eapply min_rvar_hs_EC_wf in WFP; eauto.
+      rewrite H1 in WFP; clear H1.
+      destruct (lt_dec r n); auto.
+      unfold flat_ctxt in WFP; rewrite ctxt_app_r in WFP; lia.
+    + rewrite (hole_scope_change_bounds 0 0); auto.
+  - discriminate.
+  - replace (Ebag 0 0 (Edeflam r Et)) with 
+        (Ebag 0 0 Ehol <=<[ Edeflam r Et ]) by auto.
+    rewrite hole_scope_of_fill_Edeflam; auto.
+  - replace (Ebag 0 0 (Epar EP P)) with 
+        (Ebag 0 0 Ehol <=<[ Epar EP P ]) by auto.
+    rewrite hole_scope_of_fill_Epar with (m := 0) (n := 0); auto. 
 Qed.
 
 
