@@ -850,8 +850,7 @@ Proof.
       inversion WFO; inversion WFO0; inversion WFT; 
       existT_eq; subst; rewrite_ctxt_equivs; 
       rewrite sum_zero_l, sum_zero_r in *;
-      unfold one in H2 at 3 4; unfold one in WFP2 at 2 3; 
-          rewrite delta_sum in *; simpl in *;
+      unfold one in *; rewrite delta_sum in *; simpl in *;
       clear WFP1 WFP0 WFO WFO0 WFT G0 D0 G1 D1 G2 D2 G3 D3.
 
   destruct (hole_scope Et) eqn:HS.
@@ -865,6 +864,27 @@ Proof.
     rewrite HS in H2; simpl in H2; lia.
   }
   clear Heqm_free Heqn_free; destruct H; subst.
+
+  assert (f < m1). {
+    replace m1 with (bound_fvars_at_hole_scope Et) by
+        (unfold bound_fvars_at_hole_scope, apply_at_hole_scope; now rewrite HS).
+    eapply fvar_bound_hs; eauto.
+    rewrite delta_id; auto.
+  }
+  assert (rf < n1). {
+    replace n1 with (bound_rvars_at_hole_scope Et) by
+        (unfold bound_rvars_at_hole_scope, apply_at_hole_scope; now rewrite HS).
+    eapply rvar_bound_hs; eauto.
+    eapply max_rvar_hole_EC_wf in H2; eauto.
+    rewrite sum_correct, delta_id, delta_neq in *; auto;
+        destruct (Nat.eq_dec r rf); auto; subst; rewrite delta_id in *; lia.
+  }
+  replace ((m1 + m_free) [f ↦ 1]) with 
+          (@ctxt_app _ m1 m_free (m1 [f ↦ 1]) (zero m_free)) in * by
+      now rewrite delta_app_zero_r.
+  replace ((n1 + n_free) [rf ↦ 2]) with 
+          (@ctxt_app _ n1 n_free (n1 [rf ↦ 2]) (zero n_free)) in * by
+      now rewrite delta_app_zero_r.
 
   remember (ready_var r n1 n0) as r_new.
   apply fill_wf_pres_term with 
@@ -880,47 +900,26 @@ Proof.
       (D1 := (n1 + (n0 + 1) + n_free) [r_new ↦ 1] ⨥
                 (@ctxt_app _ (n1 + (n0 + 1)) n_free (zero n1 ⊗ (D8 ⊗ flat_ctxt 2 1)) (zero n_free)))
       (G2 := (@ctxt_app _ (m1 + m_free) m0 ((m1 [f ↦ 1]) ⊗ zero m_free) (zero m0)))
-      (D2 := (@ctxt_app _ (n1 + n_free) (n0 + 1) ((n1 + n_free) [rf ↦ 2]) (zero (n0 + 1)))).
+      (D2 := (@ctxt_app _ (n1 + n_free) (n0 + 1) (n1 [rf ↦ 2] ⊗ zero n_free) (zero (n0 + 1)))).
   (* Function definition and naming are well-formed (from assumption) *)
   3: replace (m1 + m0 + m_free) with (m1 + m_free + m0) by lia;
-        replace (n1 + (n0 + 1) + n_free) with (n1 + n_free + (n0 + 1)) by lia;
-        eapply wf_weaken_free_vars; eauto.
+      replace (n1 + (n0 + 1) + n_free) with (n1 + n_free + (n0 + 1)) by lia;
+      eapply wf_weaken_free_vars; eauto.
   (* G = G1 + G2 *)
-  3: unfold one; rewrite sum_commutative;
-        rewrite delta_app_zero_r; auto;
-        now replace ((m1 + m0 + m_free) [f ↦ 1]) with ((m1 + m_free + m0) [f ↦ 1])
-            by (now replace (m1 + m_free + m0) with (m1 + m0 + m_free) by lia).
+  3: replace (@ctxt_app _ (m1 + m_free) m0 (m1 [f ↦ 1] ⊗ zero m_free) (zero m0)) 
+          with (@ctxt_app _ (m1 + m0) m_free (m1 [f ↦ 1] ⊗ zero m0) (zero m_free)) by
+          (repeat rewrite <- ctxt_app_assoc, app_zero; now rewrite Nat.add_comm);
+      repeat rewrite lctxt_sum_app_dist; now repeat rewrite sum_zero_l, sum_zero_r.
   (* D = D1 + D2 *)
-  3: assert (rf < n1) by (
-          replace n1 with (bound_rvars_at_hole_scope Et) by
-              (unfold bound_rvars_at_hole_scope, apply_at_hole_scope; now rewrite HS);
-          eapply rvar_bound_hs; eauto;
-          eapply max_rvar_hole_EC_wf in H2; eauto;
-          unfold one in *; rewrite sum_correct, delta_id, delta_neq in *; auto;
-              destruct (Nat.eq_dec r rf); auto; subst; rewrite delta_id in *; lia
-      );
-      rewrite <- (delta_app_zero_r _ _ rf); auto;
-      replace (@ctxt_app _ (n1 + n_free) (n0 + 1) (n1 [rf ↦ 2] ⊗ zero n_free) (zero (n0 + 1)))
-          with (@ctxt_app _ (n1 + n0 + 1) n_free (((n1 [rf ↦ 2]) ⊗ (zero n0)) ⊗ zero 1) (zero n_free)) by
-              (repeat rewrite delta_app_zero_r; try lia;
-              now replace (n1 + n0 + 1 + n_free) with (n1 + n_free + (n0 + 1)) by lia);
-      rewrite <- sum_assoc;
-      replace ((@ctxt_app _ (n1 + (n0 + 1)) n_free (zero n1 ⊗ (D8 ⊗ flat_ctxt 2 1)) (zero n_free))
-                  ⨥ (((n1 [rf ↦ 2] ⊗ zero n0) ⊗ zero 1) ⊗ zero n_free)) 
-          with (@ctxt_app _ (n1 + (n0 + 1)) n_free (n1 [rf ↦ 2] ⊗ (D8 ⊗ flat_ctxt 2 1)) (zero n_free)) by
-              (repeat rewrite ctxt_app_assoc; repeat rewrite Nat.add_assoc;
-              repeat rewrite lctxt_sum_app_dist, sum_zero_r;
-              now rewrite sum_zero_l);
-      now repeat rewrite Nat.add_assoc.
+  3: replace (@ctxt_app _ (n1 + n_free) (n0 + 1) (n1 [rf ↦ 2] ⊗ zero n_free) (zero (n0 + 1)))
+          with (@ctxt_app _ (n1 + (n0 + 1)) n_free ((n1 [rf ↦ 2]) ⊗ ((zero n0) ⊗ zero 1)) (zero n_free)) by
+          (repeat rewrite <- ctxt_app_assoc; repeat rewrite app_zero;
+          now replace (n0 + (1 + n_free)) with (n_free + (n0 + 1)) by lia);
+      rewrite <- sum_assoc; repeat rewrite lctxt_sum_app_dist;
+      now repeat rewrite sum_zero_l, sum_zero_r.
 
   - unfold Et_shifted; clear Et_shifted new_body.
     unfold shift_hs_by_term_vars; simpl.
-
-    assert (H := H2); apply wf_hs_split_G_hol in H;
-        destruct H as [G_bound ?].
-    2: unfold bound_fvars_at_hole_scope, apply_at_hole_scope;
-        now rewrite HS.
-    rewrite H in *; clear H.
 
     do 2 (try eapply mutate_hole_scope_wf); eauto.
     + destruct (hole_scope Et); rewrite HS; clear HS.
@@ -936,7 +935,7 @@ Proof.
         EP_ind_unsafe IH EP0; auto.
       }
 
-      destruct H; rewrite H.
+      destruct H1; rewrite H1.
       (* repeat rewrite Nat.add_assoc. *)
       unfold ready_var in Heqr_new; destruct (lt_dec r n1).
       * rewrite Nat.add_0_r in Heqr_new; subst.
