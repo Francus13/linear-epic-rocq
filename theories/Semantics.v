@@ -684,14 +684,13 @@ Inductive prim_step : term -> term -> Prop :=
       (* Get the freshened and applied body *)
     let new_body := ready_body_same_scope Et t r in
       (* Shift the vars in the application's scope *)
-    let Et_shifted := shift_hs_by_term_vars t Et in
+    let Et_fun := Et <=<[ (Epar Ehol
+                          (par (def rf (lam t))
+                               (def rf (bng f)))) ] in
+    let Et_shifted := shift_hs_by_term_vars t Et_fun in
     prim_step
-      (Et         <=[ (par (app f r)
-                      (par (def rf (lam t))
-                           (def rf (bng f)))) ])
-      (Et_shifted <=[ (par (new_body)
-                      (par (def rf (lam t))
-                           (def rf (bng f)))) ])
+      (Et_fun     <=[ app f r ])
+      (Et_shifted <=[ new_body ])
       
 | step_app_diff_scope :    (*  Et' <=[ rf <- lam r'. t | rf <- ?f | Et <=[ f r ] ]  *)
   forall Et Et' t f rf rl r,    (*  -->  Et' <=[ '' | '' | Et <=[ fresh_body(t){r=r'} ] ]  *)
@@ -701,13 +700,12 @@ Inductive prim_step : term -> term -> Prop :=
     let new_body := ready_body_diff_scope Et t r in
       (* Shift the vars in the application's scope *)
     let Et_shifted := shift_hs_by_term_vars t Et in
+    let Et_fun := Et' <=<[ (Epar Ehol
+                           (par (def rf (lam t))
+                                (def rf (bng f)))) ] in
     prim_step
-      (Et' <=[ (par (def rl (lam (Et         <=[ app f' r ])))
-               (par (def rf (lam t))
-                    (def rf (bng f)))) ])
-      (Et' <=[ (par (def rl (lam (Et_shifted <=[ new_body ])))
-               (par (def rf (lam t))
-                    (def rf (bng f)))) ])
+      (Et_fun <=[ def rl (lam (Et         <=[ app f' r ])) ])
+      (Et_fun <=[ def rl (lam (Et_shifted <=[ new_body ])) ])
 
 | step_req :    (*  Et <=[ r1 = r2 ]  -->  (rename_at_hole_scope Et r1 r2) <=[ nul ]  *)
   forall Et r1 r2,
@@ -833,15 +831,16 @@ Qed.
 Lemma wf_prim_step_app_same_scope :
   forall m n Et t f rf r,
     let new_body := ready_body_same_scope Et t r in
-    let Et_shifted := shift_hs_by_term_vars t Et in
-    wf_term m n (Et         <=[ (par (app f r)
-                                (par (def rf (lam t))
-                                     (def rf (bng f)))) ]) ->
-    wf_term m n (Et_shifted <=[ (par (new_body)
-                                (par (def rf (lam t))
-                                     (def rf (bng f)))) ]).
+    let Et_fun := Et <=<[ (Epar Ehol
+                          (par (def rf (lam t))
+                               (def rf (bng f)))) ] in
+    let Et_shifted := shift_hs_by_term_vars t Et_fun in
+    wf_term m n (Et_fun     <=[ app f r ]) ->
+    wf_term m n (Et_shifted <=[ new_body ]).
 Proof.
-  intros. destr_inv_fill_wf H.
+  intros.
+  unfold Et_fun in H. rewrite commute_fill_term in H; simpl in H.
+  destr_inv_fill_wf H.
   inversion H1; inversion WFP1; existT_eq; subst; 
       clear H1 WFP1; rewrite_ctxt_equivs.
   rewrite sum_zero_l in H2.
@@ -886,7 +885,7 @@ Proof.
           (@ctxt_app _ n1 n_free (n1 [rf ↦ 2]) (zero n_free)) in * by
       now rewrite delta_app_zero_r.
 
-  remember (ready_var r n1 n0) as r_new.
+  remember (ready_var r n1 (n0 + 1)) as r_new.
   apply fill_wf_pres_term with 
       (m_hol := m1 + m0 + m_free)
       (n_hol := n1 + (n0 + 1) + n_free)
@@ -894,6 +893,8 @@ Proof.
       (D_hol := (n1 + (n0 + 1) + n_free) [r_new ↦ 1] ⨥
                 (@ctxt_app _ (n1 + (n0 + 1)) n_free
                     (n1 [rf ↦ 2] ⊗ (D8 ⊗ flat_ctxt 2 1)) (zero n_free))).
+  (* TODO reorder proof! *)
+
   (* Split wf of the new body and the function *)
   2: apply wf_par with
       (G1 := @ctxt_app _ (m1 + m0) m_free (zero m1 ⊗ G8) (zero m_free))
@@ -937,33 +938,23 @@ Proof.
 
       destruct H1; rewrite H1.
       (* repeat rewrite Nat.add_assoc. *)
-      unfold ready_var in Heqr_new; destruct (lt_dec r n1).
-      * rewrite Nat.add_0_r in Heqr_new; subst.
-        replace ((n1 + (n0 + 1) + n_free) [r ↦ 1] ⨥ ((n1 [rf ↦ 2] ⊗ (D8 ⊗ flat_ctxt 2 1)) ⊗ zero n_free))
-            with (@ctxt_app _ (n1 + (n0 + 1)) n_free ((n1 [r ↦ 1] ⨥ n1 [rf ↦ 2]) ⊗ (D8 ⊗ flat_ctxt 2 1)) (zero n_free)) by
-                (repeat rewrite <- delta_app_zero_r; try lia; 
-                repeat rewrite lctxt_sum_app_dist;
-                now repeat rewrite sum_zero_l).
-
-
-      unfold wf_hs_fun; intros.
-     
-      remember add_rvars_wf_hs_fun; clear Heqw.
-      unfold wf_hs_fun in w.
-
-
-      (* assert (H1 := H0); apply wf_hs_var_bounds_eq in H1;
-          destruct H1; subst; simpl in *; auto. *)
-      (* replace (m1 + m2 + m0) with (m1 + m0 + m2) by lia.
-      inversion H0; existT_eq; subst. *)
-
-      apply w; clear w.
-      admit. auto.
-      rewrite H in H1. apply H1.
-
-      
-    * admit.
-      (* apply add_rvars_wf_hs_fun. *)
+      unfold ready_var in Heqr_new; destruct (lt_dec r n1); subst.
+      * rewrite Nat.add_0_r.
+        rewrite <- delta_app_zero_r, lctxt_sum_app_dist, sum_zero_l; auto.
+        repeat rewrite <- delta_app_zero_r; try lia;
+            repeat rewrite lctxt_sum_app_dist;
+            rewrite sum_zero_l.
+        apply add_rvars_wf_hs_fun.
+        intros. unfold ctxt_app; destruct (lt_dec x0 n0); auto.
+      * replace r with (n1 + (r - n1)) by lia.
+        replace (n1 + (r - n1) + (n0 + 1)) with (n1 + (n0 + 1) + (r - n1)) by lia.
+        repeat rewrite <- delta_app_zero_l; try lia;
+            do 2 rewrite <- app_zero;
+            repeat rewrite lctxt_sum_app_dist;
+            repeat rewrite sum_zero_l;
+            repeat rewrite sum_zero_r.
+        apply add_rvars_wf_hs_fun.
+        intros. unfold ctxt_app; destruct (lt_dec x0 n0); auto.
   - unfold new_body; clear Et_shifted new_body.
     (* assert (wf_term m_hol 1 (bag m0 n0 P)) by
         (inversion WFP2; inversion WFP1; now inversion WFO). *)
@@ -974,7 +965,10 @@ Proof.
     3: now rewrite sum_zero_l.
     (* 3: reflexivity. *)
     + econstructor; eauto; try reflexivity; try lia.
-      apply wf_hs_vars_correct in H2; lia.
+      * apply wf_hs_vars_correct in H2; lia.
+      * unfold ready_var, bound_rvars_at_hole_scope, apply_at_hole_scope.
+        rewrite HS; simpl.
+        destruct (lt_dec r n1); lia.
     + admit.
       (* destruct rename_fvar_pres_wf.
       destruct H0. clear H H1.
