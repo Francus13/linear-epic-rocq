@@ -729,6 +729,48 @@ Qed.
 
 
 
+(*  hole_scope commutes with filling with a hs  *)
+Lemma hole_scope_fill_hs :
+  forall Et EP,
+    is_hole_scope_at_top_proc EP = true ->
+    hole_scope (Et <=<[ EP ]) = (hole_scope Et) <=<[ EP ].
+Proof.
+  destruct Et; generalize dependent m; generalize dependent n;
+      generalize dependent EP; EP_ind_unsafe IH EP; simpl in *; intros.
+  - now rewrite hole_scope_id.
+  - assert (forall EP, Ebag m n EP = Ebag m n Ehol <=<[ EP ]) by auto.
+    repeat rewrite H3, hole_scope_of_fill_Edeflam; auto.
+  - destruct (is_hole_scope_at_top_proc EP) eqn:HS.
+    + unfold hole_scope. repeat rewrite inv_hole_scope_at_top; auto; simpl.
+      now apply meet_hole_scope_at_top_proc.
+    + replace (Ebag m n (Epar (EP <=<[ EP0 ]p) H2)) with (Ebag m n Ehol <=<[ Epar (EP <=<[ EP0 ]p) H2 ]) by auto.
+      replace (Ebag m n (Epar EP H2)) with (Ebag m n Ehol <=<[ Epar EP H2 ]) by auto.
+      repeat rewrite hole_scope_of_fill_Epar with (m := m) (n := n); auto.
+      now apply left_join_hole_scope_at_top_proc.
+Qed.
+
+
+
+(*  hole_scope ignores prefixes before reaching the hs  *)
+Lemma hole_scope_fill_not_hs :
+  forall Et EP m n,
+    is_hole_scope_at_top_proc EP = false ->
+    hole_scope (Et <=<[ EP ]) = hole_scope (Ebag m n EP).
+Proof.
+  destruct Et; generalize dependent m; generalize dependent n;
+      generalize dependent EP; EP_ind_unsafe IH EP; simpl in *; intros.
+  - unfold hole_scope; simpl.
+    apply build_not_hs_correct in H; dest_conj_disj_exist.
+    now repeat rewrite H1.
+  - assert (forall EP, Ebag m n EP = Ebag m n Ehol <=<[ EP ]) by auto.
+    repeat rewrite H3, hole_scope_of_fill_Edeflam; auto.
+  - replace (Ebag m n (Epar (EP <=<[ EP0 ]p) H2)) with (Ebag m n Ehol <=<[ Epar (EP <=<[ EP0 ]p) H2 ]) by auto.
+    rewrite hole_scope_of_fill_Epar with (m := m) (n := n); auto.
+    now apply right_join_hole_scope_at_top_proc.
+Qed.
+
+
+
 (*  hole_scope after mutate_hole_scope is the same
     as mutating the hole_scope *)
 Lemma hole_scope_mutate_hole_scope :

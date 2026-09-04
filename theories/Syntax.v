@@ -1080,12 +1080,37 @@ Proof.
   erewrite H; eauto; erewrite H0; eauto.
 Qed.
 
+Lemma rename_fvar_ind :
+  (forall t n1 n1' n2 n2' (R1 : ren n1 n1') (R2 : ren n2 n2'),
+    R1 = R2 ->
+      rename_fvar_term R1 t = rename_fvar_term R2 t)
+  /\
+  (forall P n1 n1' n2 n2' (R1 : ren n1 n1') (R2 : ren n2 n2'),
+    R1 = R2 ->
+      rename_fvar_proc R1 P = rename_fvar_proc R2 P)
+  /\
+  (forall o n1 n1' n2 n2' (R1 : ren n1 n1') (R2 : ren n2 n2'),
+    R1 = R2 ->
+      rename_fvar_oper R1 o = rename_fvar_oper R2 o).
+Proof.
+  apply tpo_ind; intros; simpl.
+  (* By IHs *)
+  all: try erewrite H; eauto; try rewrite H0; auto.
+  erewrite H; eauto; erewrite H0; eauto.
+Qed.
+
 Lemma rename_rvar_ind_proc : forall P n1 n1' n2 n2' (R1 : ren n1 n1') (R2 : ren n2 n2'),
     R1 = R2 -> rename_rvar_proc R1 P = rename_rvar_proc R2 P.
 Proof. apply rename_rvar_ind. Qed.
 Lemma rename_rvar_ind_oper : forall o n1 n1' n2 n2' (R1 : ren n1 n1') (R2 : ren n2 n2'),
     R1 = R2 -> rename_rvar_oper R1 o = rename_rvar_oper R2 o.
 Proof. apply rename_rvar_ind. Qed.
+Lemma rename_fvar_ind_proc : forall P n1 n1' n2 n2' (R1 : ren n1 n1') (R2 : ren n2 n2'),
+    R1 = R2 -> rename_fvar_proc R1 P = rename_fvar_proc R2 P.
+Proof. apply rename_fvar_ind. Qed.
+Lemma rename_fvar_ind_oper : forall o n1 n1' n2 n2' (R1 : ren n1 n1') (R2 : ren n2 n2'),
+    R1 = R2 -> rename_fvar_oper R1 o = rename_fvar_oper R2 o.
+Proof. apply rename_fvar_ind. Qed.
   
 
 
@@ -1151,12 +1176,12 @@ Lemma rename_rvar_pres_wf :
       True)
 /\  (forall m n G D P,
       wf_proc m n G D P ->
-      forall (R : ren n n) (HWF : wf_ren R),
-        wf_proc m n G (lctxt_rename R D) (rename_rvar_proc R P))
+      forall n' (R : ren n n') (HWF : wf_ren R),
+        wf_proc m n' G (lctxt_rename R D) (rename_rvar_proc R P))
 /\  (forall m n G D o,
       wf_oper m n G D o ->
-      forall (R : ren n n) (HWF : wf_ren R),
-        wf_oper m n G (lctxt_rename R D) (rename_rvar_oper R o)).
+      forall n' (R : ren n n') (HWF : wf_ren R),
+        wf_oper m n' G (lctxt_rename R D) (rename_rvar_oper R o)).
 Proof.
   apply wf_tpo_ind; simpl; intros.
   (* All cases by IH and context rewriting *)
@@ -1172,16 +1197,16 @@ Qed.
 Lemma rename_fvar_pres_wf :
     (forall m n t,
       wf_term m n t ->
-      forall (R : ren m m) (HWF : wf_ren R),
-        wf_term m n (rename_fvar_term R t))
+      forall m' (R : ren m m') (HWF : wf_ren R),
+        wf_term m' n (rename_fvar_term R t))
 /\  (forall m n G D P,
       wf_proc m n G D P ->
-      forall (R : ren m m) (HWF : wf_ren R),
-        wf_proc m n (lctxt_rename R G) D (rename_fvar_proc R P))
+      forall m' (R : ren m m') (HWF : wf_ren R),
+        wf_proc m' n (lctxt_rename R G) D (rename_fvar_proc R P))
 /\  (forall m n G D o,
       wf_oper m n G D o ->
-      forall (R : ren m m) (HWF : wf_ren R),
-        wf_oper m n (lctxt_rename R G) D (rename_fvar_oper R o)).
+      forall m' (R : ren m m') (HWF : wf_ren R),
+        wf_oper m' n (lctxt_rename R G) D (rename_fvar_oper R o)).
 Proof.
   apply wf_tpo_ind; simpl; intros.
   (* All cases by IH and context rewriting *)
@@ -1197,9 +1222,9 @@ Proof.
       because it extends the context *)
   Unshelve.
   rewrite <- lctxt_rename_id with (c := G).
-  rewrite <- (@lctxt_rename_zero m' m' R).
+  rewrite <- (@lctxt_rename_zero m' m'0 R).
   rewrite <- lctxt_rename_app; auto using wf_ren_id.
-  fold (@ren_shift m' m' m R).
+  fold (@ren_shift m'0 m'0 m R).
   apply H. now apply wf_ren_shift.
 Qed.
 
