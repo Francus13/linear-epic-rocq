@@ -54,17 +54,12 @@ Lemma weaken_ren_wf_ren :
     wf_ren (weaken_ren m n).
 Proof. unfold wf_ren, weaken_ren, weaken_tail_ren; intros; split; intros; lia_goal. Qed.
 
-Lemma ren_shift_weaken_commute : 
-forall (m' m0 m1 m2 : nat),
-  ren_shift m' (weaken_tail_ren m0 m1 m2) =
-  weaken_tail_ren m0 (m' + m1) m2.
+Lemma weaken_ren_lctxt_rename :
+  forall m n (c : lctxt m),
+    lctxt_rename (weaken_ren m n) c ≡[n + m] @ctxt_app _ n m (zero n) c.
 Proof.
-  intros.
-  apply functional_extensionality.
-  intros x.
-  unfold ren_shift, weaken_tail_ren, ctxt_app, ren_id.
-  lia_goal.
-Qed.
+
+Admitted.
 
 
 
@@ -83,6 +78,15 @@ Lemma ren_commute_str_wf_ren :
   forall m0 m1 m2 m3,
     wf_ren (ren_commute_str m0 m1 m2 m3).
 Proof. unfold wf_ren, ren_commute_str; intros; split; intros; lia_goal. Qed.
+
+Lemma ren_commute_str_lctxt_rename :
+  forall m0 m1 m2 m3 (c0 : lctxt m0) (c1 : lctxt m1) (c2 : lctxt m2) (c3 : lctxt m3),
+    lctxt_rename (ren_commute_str m0 m1 m2 m3)
+        (@ctxt_app _ (m0 + m1 + m2) m3 (c0 ⊗ c1 ⊗ c2) c3)
+    ≡[m0 + m2 + m1 + m3] @ctxt_app _ (m0 + m2 + m1) m3 (c0 ⊗ c2 ⊗ c1) c3.
+Proof.
+
+Admitted.
 
 
 
@@ -963,50 +967,38 @@ Proof.
       remember (weaken_ren ((n0 + 1) + n_free) n1) as Rr. 
       erewrite rename_fvar_ind_proc with (R2 := Rf); auto.
       erewrite rename_rvar_ind_proc with (R2 := Rr); auto.
-      replace ((zero m1 ⊗ G8) ⊗ zero m_free)
-          with (lctxt_rename Rf (G8 ⊗ zero (m1 + m_free))).
-      replace ((zero n1 ⊗ (D8 ⊗ flat_ctxt 1 1)) ⊗ zero n_free)
-          with (lctxt_rename Rr ((D8 ⊗ flat_ctxt 1 1) ⊗ zero n_free)).
-      all: replace (n1 + (n0 + 1 + n_free)) with (n1 + (n0 + 1) + n_free) by lia.
-      * apply rename_fvar_pres_wf; try (subst; apply ren_commute_str_wf_ren).
-        replace (n1 + (n0 + 1) + n_free) with (n1 + (n0 + 1 + n_free)) by lia;
+
+      (* remember (ren_commute_str_lctxt_rename 0) as HL; simpl in HL;
+          rewrite <- (ctxt_app_null_l (zero 0) ((zero m1 ⊗ G8) ⊗ zero m_free)).
+          rewrite <- HL. *)
+      assert (@ctxt_app _ (m1 + m0) m_free (zero m1 ⊗ G8) (zero m_free) ≡[m1 + m0 + m_free]
+          lctxt_rename Rf (@ctxt_app _ m0 (m1 + m_free) G8 (zero (m1 + m_free)))). {
+        rewrite <- (ctxt_app_null_l (zero 0) (G8 ⊗ zero (m1 + m_free))), <- app_zero.
+        repeat rewrite ctxt_app_assoc.
+        replace (m1 + m0 + m_free) with (0 + m1 + m0 + m_free) by lia.
+        subst; rewrite ren_commute_str_lctxt_rename.
+        simpl; now rewrite ctxt_app_null_l.
+      }
+      rewrite H1; clear H1.
+      assert (@ctxt_app _ (n1 + (n0 + 1)) n_free (zero n1 ⊗ (D8 ⊗ flat_ctxt 1 1)) (zero n_free)
+          ≡[n1 + (n0 + 1) + n_free] (lctxt_rename Rr ((D8 ⊗ flat_ctxt 1 1) ⊗ zero n_free))). {
+        replace (n1 + (n0 + 1) + n_free) with (n1 + (n0 + 1 + n_free)) by lia.
+        subst; rewrite weaken_ren_lctxt_rename; now repeat rewrite ctxt_app_assoc.
+      }
+      rewrite H1; clear H1.
+
+      apply rename_fvar_pres_wf; 
+          try (subst; remember (ren_commute_str_wf_ren 0); now simpl in *).
+      replace (n1 + (n0 + 1) + n_free) with (n1 + (n0 + 1 + n_free)) by lia;
           apply rename_rvar_pres_wf; try (subst; apply weaken_ren_wf_ren).
-        (* Weaken! *)
+      apply wf_weaken_free_vars with (m' := 0) (n' := n_free) in WFP.
+      rewrite Nat.add_0_r, ctxt_app_l in WFP; simpl.
+      now repeat rewrite Nat.add_assoc in *.
 
     + now rewrite sum_zero_l.
     + rewrite <- sum_assoc; repeat rewrite lctxt_sum_app_dist; 
           repeat rewrite sum_zero_l.
       solve_ctxt_eq.
-
-
-
-
-
-  (* Split wf of the new body and the function
-  2: apply wf_par with
-      (G1 := @ctxt_app _ (m1 + m0) m_free (zero m1 ⊗ G8) (zero m_free))
-      (D1 := (n1 + (n0 + 1) + n_free) [r_new ↦ 1] ⨥
-                (@ctxt_app _ (n1 + (n0 + 1)) n_free (zero n1 ⊗ (D8 ⊗ flat_ctxt 2 1)) (zero n_free)))
-      (G2 := (@ctxt_app _ (m1 + m_free) m0 ((m1 [f ↦ 1]) ⊗ zero m_free) (zero m0)))
-      (D2 := (@ctxt_app _ (n1 + n_free) (n0 + 1) (n1 [rf ↦ 2] ⊗ zero n_free) (zero (n0 + 1)))).
-  (* Function definition and naming are well-formed (from assumption) *)
-  3: replace (m1 + m0 + m_free) with (m1 + m_free + m0) by lia;
-      replace (n1 + (n0 + 1) + n_free) with (n1 + n_free + (n0 + 1)) by lia;
-      eapply wf_weaken_free_vars; eauto.
-  (* G = G1 + G2 *)
-  3: replace (@ctxt_app _ (m1 + m_free) m0 (m1 [f ↦ 1] ⊗ zero m_free) (zero m0)) 
-          with (@ctxt_app _ (m1 + m0) m_free (m1 [f ↦ 1] ⊗ zero m0) (zero m_free)) by
-          (repeat rewrite <- ctxt_app_assoc, app_zero; now rewrite Nat.add_comm);
-      repeat rewrite lctxt_sum_app_dist; now repeat rewrite sum_zero_l, sum_zero_r.
-  (* D = D1 + D2 *)
-  3: replace (@ctxt_app _ (n1 + n_free) (n0 + 1) (n1 [rf ↦ 2] ⊗ zero n_free) (zero (n0 + 1)))
-          with (@ctxt_app _ (n1 + (n0 + 1)) n_free ((n1 [rf ↦ 2]) ⊗ ((zero n0) ⊗ zero 1)) (zero n_free)) by
-          (repeat rewrite <- ctxt_app_assoc; repeat rewrite app_zero;
-          now replace (n0 + (1 + n_free)) with (n_free + (n0 + 1)) by lia);
-      rewrite <- sum_assoc; repeat rewrite lctxt_sum_app_dist;
-      now repeat rewrite sum_zero_l, sum_zero_r. *)
-
-
 Qed.
 
 
