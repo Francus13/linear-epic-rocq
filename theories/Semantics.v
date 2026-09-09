@@ -56,10 +56,26 @@ Proof. unfold wf_ren, weaken_ren, weaken_tail_ren; intros; split; intros; lia_go
 
 Lemma weaken_ren_lctxt_rename :
   forall m n (c : lctxt m),
-    lctxt_rename (weaken_ren m n) c ≡[n + m] @ctxt_app _ n m (zero n) c.
+  let R := weaken_ren m n in
+  let c_new := @ctxt_app _ n m (zero n) c in
+    lctxt_rename R c ≡[n + m] c_new.
 Proof.
-
-Admitted.
+  intros. unfold lctxt_rename.
+  enough (forall i, (i <= m -> lctxt_rename_helper i R c ≡[n + i] c_new)
+                 /\ (forall x, (n + i) <= x -> lctxt_rename_helper i R c x = 0)).
+  { apply H; lia. }
+  assert (forall i, weaken_ren m n i = n + i) by
+      (intros; unfold weaken_ren, weaken_tail_ren; destruct (lt_dec i 0); lia).
+  unfold ctxt_eq, R, c_new in *; induction i; simpl; intros; split; intros.
+  all: try solve [solve_ctxt_eq; auto].
+  all: destruct IHi.
+  all: rewrite sum_correct.
+  all: rewrite H; clear H; unfold delta.
+  all: destruct (lt_dec (n + i) (n + m)); destruct (Nat.eq_dec (n + i) x); subst; try lia; simpl.
+  all: try (rewrite H2; lia).
+  rewrite ctxt_app_r, H3; try lia.
+  now replace (n + i - n) with i by lia.
+Qed.
 
 
 
@@ -81,12 +97,35 @@ Proof. unfold wf_ren, ren_commute_str; intros; split; intros; lia_goal. Qed.
 
 Lemma ren_commute_str_lctxt_rename :
   forall m0 m1 m2 m3 (c0 : lctxt m0) (c1 : lctxt m1) (c2 : lctxt m2) (c3 : lctxt m3),
-    lctxt_rename (ren_commute_str m0 m1 m2 m3)
-        (@ctxt_app _ (m0 + m1 + m2) m3 (c0 ⊗ c1 ⊗ c2) c3)
-    ≡[m0 + m2 + m1 + m3] @ctxt_app _ (m0 + m2 + m1) m3 (c0 ⊗ c2 ⊗ c1) c3.
+  let R := ren_commute_str m0 m1 m2 m3 in
+  let c_old := @ctxt_app _ (m0 + m1 + m2) m3 (c0 ⊗ c1 ⊗ c2) c3 in
+  let c_new := @ctxt_app _ (m0 + m2 + m1) m3 (c0 ⊗ c2 ⊗ c1) c3 in
+    lctxt_rename R c_old ≡[m0 + m2 + m1 + m3] c_new.
 Proof.
-
-Admitted.
+  intros. unfold lctxt_rename.
+  enough (forall i, (i <= m0 -> 
+                        lctxt_rename_helper i R c_old ≡[i] c_new)
+                 /\ (m0 < i <= m0 + m1 -> 
+                        lctxt_rename_helper i R c_old ≡[i + m2] @ctxt_app _ (m0 + m1) m2 (c0 ⊗ zero m2) c1)
+                 /\ (m0 + m1 < i <= m0 + m1 + m2 -> 
+                        let c2_build := fun x => if (lt_dec x (i - m0 - m1 + 1)) then c2 x else 0 in
+                        lctxt_rename_helper i R c_old ≡[i] @ctxt_app _ (m0 + m1) m2 (c0 ⊗ c2_build) c1)
+                 /\ (m0 + m1 + m2 < i <= m0 + m1 + m2 + m3 -> 
+                        lctxt_rename_helper i R c_old ≡[i] c_new)
+                 /\ (forall x, i <= x -> lctxt_rename_helper i R c_old x = 0)).
+  { apply H; lia. }
+  assert (forall i, weaken_ren m n i = n + i) by
+      (intros; unfold weaken_ren, weaken_tail_ren; destruct (lt_dec i 0); lia).
+  unfold ctxt_eq, R, new_c in *; induction i; simpl; intros; split; intros.
+  all: try solve [solve_ctxt_eq; auto].
+  all: destruct IHi.
+  all: rewrite sum_correct.
+  all: rewrite H; clear H; unfold delta.
+  all: destruct (lt_dec (n + i) (n + m)); destruct (Nat.eq_dec (n + i) x); subst; try lia; simpl.
+  all: try (rewrite H2; lia).
+  rewrite ctxt_app_r, H3; try lia.
+  now replace (n + i - n) with i by lia.
+Qed.
 
 
 
