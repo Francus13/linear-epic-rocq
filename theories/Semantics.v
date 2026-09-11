@@ -103,25 +103,44 @@ Lemma ren_commute_str_lctxt_rename :
     lctxt_rename R c_old ≡[m0 + m2 + m1 + m3] c_new.
 Proof.
   intros. unfold lctxt_rename.
-  enough (forall i, (i <= m0 -> 
-                        lctxt_rename_helper i R c_old ≡[i] c_new)
-                 /\ (m0 < i <= m0 + m1 -> 
-                        lctxt_rename_helper i R c_old ≡[i + m2] @ctxt_app _ (m0 + m1) m2 (c0 ⊗ zero m2) c1)
-                 /\ (m0 + m1 < i <= m0 + m1 + m2 -> 
+  enough (forall i, (i <= m0 + m1 + m2 + m3 ->
                         let c2_build := fun x => if (lt_dec x (i - m0 - m1 + 1)) then c2 x else 0 in
-                        lctxt_rename_helper i R c_old ≡[i] @ctxt_app _ (m0 + m1) m2 (c0 ⊗ c2_build) c1)
-                 /\ (m0 + m1 + m2 < i <= m0 + m1 + m2 + m3 -> 
-                        lctxt_rename_helper i R c_old ≡[i] c_new)
+                        lctxt_rename_helper i R c_old 
+                          ≡[if lt_dec m0 i then if lt_dec i (m0 + m1 + 1) then i + m2 
+                                else i else i]
+                        @ctxt_app _ (m0 + m2 + m1) m3 (c0 ⊗ c2_build ⊗ c1) c3)
                  /\ (forall x, i <= x -> lctxt_rename_helper i R c_old x = 0)).
-  { apply H; lia. }
-  assert (forall i, weaken_ren m n i = n + i) by
-      (intros; unfold weaken_ren, weaken_tail_ren; destruct (lt_dec i 0); lia).
-  unfold ctxt_eq, R, new_c in *; induction i; simpl; intros; split; intros.
+  {
+    destruct (H (m0 + m2 + m1 + m3)); clear H H1. 
+    assert (m0 + m2 + m1 + m3 <= m0 + m1 + m2 + m3) by lia.
+    apply H0 in H; clear H0.
+    replace (m0 + (m1 + m2) + m3) with (m0 + m2 + m1 + m3) in * by lia.
+    assert ((fun x : nat => if lt_dec x (m0 + m2 + m1 + m3 - m0 - m1 + 1) then c2 x else 0) ≡[m2] c2).
+    { unfold ctxt_eq; intros; destruct (lt_dec x (m0 + m2 + m1 + m3 - m0 - m1 + 1)); lia. }
+    unfold c_old, c_new in *.
+    unfold ctxt_eq in *; intros; specialize H with x; specialize H0 with (x - m0 - m1).
+    destruct (lt_dec m0 (m0 + m2 + m1 + m3)); destruct (lt_dec (m0 + m2 + m1 + m3) (m0 + m1 + 1)).
+    all: rewrite H; solve_ctxt_eq.
+  }
+  (* assert (forall i, weaken_ren m n i = n + i) by
+      (intros; unfold weaken_ren, weaken_tail_ren; destruct (lt_dec i 0); lia). *)
+  unfold ctxt_eq, R, c_new, c_old in *; induction i; simpl; intros; split; intros.
   all: try solve [solve_ctxt_eq; auto].
   all: destruct IHi.
   all: rewrite sum_correct.
-  all: rewrite H; clear H; unfold delta.
-  all: destruct (lt_dec (n + i) (n + m)); destruct (Nat.eq_dec (n + i) x); subst; try lia; simpl.
+  all: unfold ren_commute_str at 1, delta.
+  all: destruct (lt_dec i m0); destruct (lt_dec i (m0 + m1)); destruct (lt_dec i (m0 + m1 + m2)); try lia; simpl.
+  - lia_destruct; lia_goal; subst; simpl. 
+    rewrite H2; try lia; rewrite Nat.add_0_r. repeat rewrite ctxt_app_l; lia.
+    rewrite H1; try lia. repeat rewrite ctxt_app_l; lia.
+  - lia_destruct; lia_goal; subst; simpl.
+  rewrite H2; try lia; rewrite Nat.add_0_r.
+    rewrite ctxt_app_l, ctxt_app_l, ctxt_app_r, ctxt_app_l, ctxt_app_r; try lia.
+    now replace (i + m2 - (m0 + m2)) with (i - m0) by lia.
+  rewrite H1; try lia.
+    destruct (lt_dec x m0). solve_ctxt_eq. solve_ctxt_eq. destruct m0; lia.
+    repeat rewrite ctxt_app_l.  
+  rewrite ctxt_app_l, ctxt_app_l, ctxt_app_r, ctxt_app_l, ctxt_app_r; try lia.
   all: try (rewrite H2; lia).
   rewrite ctxt_app_r, H3; try lia.
   now replace (n + i - n) with i by lia.
