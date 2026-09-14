@@ -128,8 +128,7 @@ Proof.
     unfold ctxt_eq in *; intros; specialize H with x; specialize H0 with (x - m0 - m1).
     lia_destruct; rewrite H; solve_ctxt_eq.
   }
-  (* assert (forall i, weaken_ren m n i = n + i) by
-      (intros; unfold weaken_ren, weaken_tail_ren; destruct (lt_dec i 0); lia). *)
+  
   unfold ctxt_eq, R, c_new, c_old in *; induction i; simpl; intros; split; intros.
   1, 2: solve_ctxt_eq; auto.
   all: destruct IHi.
@@ -1029,9 +1028,6 @@ Proof.
       erewrite rename_fvar_ind_proc with (R2 := Rf); auto.
       erewrite rename_rvar_ind_proc with (R2 := Rr); auto.
 
-      (* remember (ren_commute_str_lctxt_rename 0) as HL; simpl in HL;
-          rewrite <- (ctxt_app_null_l (zero 0) ((zero m1 ⊗ G8) ⊗ zero m_free)).
-          rewrite <- HL. *)
       assert (@ctxt_app _ (m1 + m0) m_free (zero m1 ⊗ G8) (zero m_free) ≡[m1 + m0 + m_free]
           lctxt_rename Rf (@ctxt_app _ m0 (m1 + m_free) G8 (zero (m1 + m_free)))). {
         rewrite <- (ctxt_app_null_l (zero 0) (G8 ⊗ zero (m1 + m_free))), <- app_zero.
