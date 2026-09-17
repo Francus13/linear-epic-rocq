@@ -792,6 +792,30 @@ Qed.
 
 
 
+(* fvars at the hs are included in the fvars to the hs *)
+Lemma fvars_to_hole_include_at_hs :
+  forall Et,
+    bound_fvars_at_hole_scope Et <= bound_fvars_to_hole Et.
+Proof.
+  intros; destruct Et; generalize dependent m; 
+      generalize dependent n; generalize dependent EP.
+  EP_ind_unsafe IH EP; intros; 
+      unfold bound_fvars_at_hole_scope, apply_at_hole_scope in *; simpl in *.
+  - lia.
+  - replace (Ebag m n (Edeflam H (Ebag H1 H0 EP))) with 
+        ((Ebag m n Ehol) <=<[ Edeflam H (Ebag H1 H0 EP) ]) by auto.
+    rewrite hole_scope_of_fill_Edeflam.
+    rewrite IH; lia.
+  - destruct (is_hole_scope_at_top_proc EP) eqn:HS.
+    + rewrite hole_scope_id; auto.
+      simpl; lia.
+    + replace (Ebag m n (Epar EP H2)) with 
+          (Ebag m n Ehol <=<[ Epar EP H2 ]) by auto.
+      rewrite hole_scope_of_fill_Epar with (m := m) (n := n); auto.
+Qed.
+
+
+
 (* EC Renaming preserves hole-scopedness *)
 Lemma ren_pres_hs_proc :
   forall EP n n' (R : ren n n'),
