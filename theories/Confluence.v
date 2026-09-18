@@ -9,26 +9,28 @@ From Stdlib Require Import
 
 From LEpic Require Import
   Contexts
-  Syntax.
+  Syntax
+  EvalContexts
+  Semantics.
 
 
 Lemma wf_step : forall m n t t' (G : lctxt m),
-    wf_term m n G (zero n) t ->
-    step m n t t' ->
-    wf_term m n G (zero n) t'.
+    wf_term m n t ->
+    step t t' ->
+    wf_term m n t'.
 Proof.
-  intros.
+  (* intros.
   inversion H0; subst. 
   specialize (wf_seq_term t t1') as Ht1'.
   apply Ht1' with (m := m) (n := n) (G := G) (D := zero n) in H1;
   try assumption.
   apply wf_prim_step with (m := m) (n := n) (G := G) (t := t1') (t' := t');
-  try assumption.
-Qed.
+  try assumption. *)
+Admitted.
 
 (* Renamings lemmas *)
 
-Lemma wf_ren_shift :
+(* Lemma wf_ren_shift :
 forall m m' 
        (bf : Renamings.ren m' m')
        (HWF : Renamings.wf_ren bf),
@@ -136,14 +138,14 @@ Proof.
               (Renamings.bij_inv bf HBF (x - m)) by lia.
       rewrite -> bij_ren_inv_elt with (m := n) (bf := bf) (HBF := HBF) (x := (x - m));
       try assumption; try lia.
-Qed.
+Qed. *)
 
 
 (* peq/seq lemmas *)
 
 Import Renamings.
 
-Lemma peq_renaming_tpo : 
+(* Lemma peq_renaming_tpo : 
   (forall (m n : nat) (t : term),
       ws_term m n t ->
       forall  (bf : Renamings.ren m m) (br : Renamings.ren n n)
@@ -623,22 +625,36 @@ Proof.
   I am thinking that Hpar might need to change. Despite having HQ; Hpar is not enough
   when it is inverted.
 *)
-Admitted.  
+Admitted.   *)
 
 
 (* Confluence *)
 Lemma confluence :
   forall m n (t t1 t2: term) (G : lctxt m) (D : lctxt n)
-    (HWF : wf_term m n G D t)
-    (HS1 : step m n t t1)
-    (HS2 : step m n t t2),
-  exists m', exists n',
-    (aeq m' n' t1 t2) 
-    \/
+    (HWF : wf_term m n t)
+    (HS1 : step t t1)
+    (HS2 : step t t2),
       (exists t1', exists t2', 
-        (step m n t1 t1') /\
-          (step m n t2 t2') /\
+        (multi_step t1 t1') /\
+          (multi_step t2 t2') /\
           aeq m' n' t1' t2').
+
+(*
+  invert HS1 HS2.
+  t = EtA <=[ PA ] /\ t = EtB <=[ PB ]
+  t1 = Et1 <=[ P1 ]
+  t2 = Et2 <=[ P2 ]
+
+  EtA <=[ PA ]  -->  Et1 <=[ P1 ]
+  EtB <=[ PB ]  -->  Et2 <=[ P2 ]
+  case {}
+
+  Et1 <=[ P1 ]  ?=  Et3 <=[ PB ]  -?->  EtC <=[ P2 ]
+  Et2 <=[ P2 ]  ?=  Et4 <=[ PA ]  -?->  EtD <=[ P1 ]
+  EtC <=[ P2 ]  ?=a  EtD <=[ P1 ]
+*)
+
+
 Proof.
   intros.
   inversion HS1; subst.
