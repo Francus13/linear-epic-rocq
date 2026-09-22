@@ -1404,6 +1404,21 @@ Qed.
 
 
 
+(* m_hol is equal to the free vars plus all bound vars to the hole *)
+Lemma wf_hs_fvars_eq_free_plus_bound :
+    (forall m n m_hol n_hol G_hol D_hol Et,
+      wf_EC_term m n m_hol n_hol G_hol D_hol Et ->
+        m_hol = m + bound_fvars_to_hole Et)
+/\  (forall m n m_hol n_hol G D G_hol D_hol EP, 
+      wf_EC_proc m n m_hol n_hol G D G_hol D_hol EP ->
+        m_hol = m + bound_fvars_to_hole (Ebag 0 0 EP)).
+Proof.
+  (* All cases are immediate after IH *)
+  apply wf_EC_ind; simpl; intros; try rewrite H; lia.
+Qed.
+
+
+
 (* If an EC is wf, then splitting it at its hole scope gives
     two wf ECs (the accumulated Et_top and the hole scope Et_hs).
   This case is when hole scope <> top scope,

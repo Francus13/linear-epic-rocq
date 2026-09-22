@@ -628,7 +628,7 @@ Definition ready_body_fvar_same_scope (m_app m : nat) (P : proc) : proc :=
     - m_inner fvars are bound between the lambda's scope and application's scope (exclusive)    *)
 Definition ready_body_fvar_diff_scope (m_inner m_app m : nat) (P : proc) : proc :=
     (* Weaken the scope : [m + m_free] -> [m_app + m_inner + m + m_free] *)
-  let P1 := rename_rvar_proc (weaken_ren m (m_app + m_inner)) P in
+  let P1 := rename_fvar_proc (weaken_ren m (m_app + m_inner)) P in
     (* Move the m bindings to end of new local scope : 
           [m_app + m_inner + m + m_free] -> [m_app + m + m_inner + m_free] *)
   rename_fvar_proc (ren_commute_str m_app m_inner m 0) P1.
@@ -1040,17 +1040,18 @@ Proof.
         simpl; now rewrite ctxt_app_null_l.
       }
       rewrite H1; clear H1.
+      apply rename_fvar_pres_wf; 
+          try (subst; remember (ren_commute_str_wf_ren 0); now simpl in *); clear HeqRf Rf.
+
       assert (@ctxt_app _ (n1 + (n0 + 1)) n_free (zero n1 ⊗ (D8 ⊗ flat_ctxt 1 1)) (zero n_free)
           ≡[n1 + (n0 + 1) + n_free] (lctxt_rename Rr ((D8 ⊗ flat_ctxt 1 1) ⊗ zero n_free))). {
         replace (n1 + (n0 + 1) + n_free) with (n1 + (n0 + 1 + n_free)) by lia.
         subst; rewrite weaken_ren_lctxt_rename; now repeat rewrite ctxt_app_assoc.
       }
       rewrite H1; clear H1.
-
-      apply rename_fvar_pres_wf; 
-          try (subst; remember (ren_commute_str_wf_ren 0); now simpl in *).
       replace (n1 + (n0 + 1) + n_free) with (n1 + (n0 + 1 + n_free)) by lia;
-          apply rename_rvar_pres_wf; try (subst; apply weaken_ren_wf_ren).
+          apply rename_rvar_pres_wf; try (subst; apply weaken_ren_wf_ren); clear HeqRr Rr.
+
       apply wf_weaken_free_vars with (m' := 0) (n' := n_free) in WFP.
       rewrite Nat.add_0_r, ctxt_app_l in WFP; simpl.
       now repeat rewrite Nat.add_assoc in *.
@@ -1091,7 +1092,8 @@ Proof.
       unfold one in *; rewrite delta_sum in *; simpl in *;
       clear WFP1 WFP0 WFO WFO0 WFT G0 D0 G1 D1 G2 D2 G3 D3.
 
-  unfold bound_fvars_at_hole_scope, bound_rvars_at_hole_scope,
+  unfold bound_fvars_before_hole_scope,
+      bound_fvars_at_hole_scope, bound_rvars_at_hole_scope,
       apply_at_hole_scope in new_body.
   destruct (hole_scope Et) eqn:HS; simpl in *.
   remember (m_hol' - m1) as m_free.
@@ -1141,7 +1143,6 @@ Proof.
   econstructor; eauto; try solve [unfold one; now rewrite sum_zero_r].
   econstructor; eauto; try reflexivity.
 
-  (* TODO *)
   remember (ready_var r n1 (n0 + 1)) as r_new.
   apply fill_wf_pres_term with 
       (m_hol := m1 + m0 + m_free)
@@ -1154,21 +1155,16 @@ Proof.
   - unfold Et_shifted; clear Et_shifted new_body.
     unfold shift_hs_by_term_vars; simpl.
 
-    do 2 (try eapply mutate_hole_scope_wf); eauto; unfold Et_fun.
-    + eapply EC_fill_wf_pres_term; eauto.
-      econstructor; eauto.
-      2: now rewrite sum_zero_l.
-      2: reflexivity.
-      econstructor; reflexivity.
+    do 2 (try eapply mutate_hole_scope_wf); eauto.
 
-    + rewrite hole_scope_fill_hs, HS; auto; simpl.
+    + rewrite HS; auto; simpl.
       rewrite <- app_zero.
       apply add_fvars_wf_hs_fun; eauto.
 
     + unfold add_fvars_hole_scope.
       rewrite hole_scope_mutate_hole_scope.
       2: intros; destruct Et0; induction EP0; auto.
-      rewrite hole_scope_fill_hs, HS; auto; simpl.
+      rewrite HS; auto; simpl.
       unfold add_fvars; simpl.
       unfold ready_var in Heqr_new; destruct (lt_dec r n1); subst.
       * repeat rewrite Nat.add_0_r.
@@ -1201,31 +1197,56 @@ Proof.
         destruct (lt_dec r n1); lia.
       * solve_ctxt_eq.
 
-    + remember (ren_commute_str 0 m0 m1 m_free) as Rf.
+    + remember (bound_fvars_to_hole Et - m1) as m_bbhs.
+      assert (m_free = m_bbhs + m_hol).
+      {
+        apply wf_hs_fvars_eq_free_plus_bound in H4; subst.
+        remember (fvars_to_hole_include_at_hs Et); clear Heql.
+        unfold bound_fvars_at_hole_scope, apply_at_hole_scope in l.
+        rewrite HS in l; simpl in l; lia.
+      }
+      clear Heqm_bbhs; subst.
+      
+      remember (ren_commute_str m1 m_bbhs m0 m_hol) as Rf1.
+      remember (weaken_ren (m0 + m_hol) (m1 + m_bbhs)) as Rf2.
       remember (weaken_ren ((n0 + 1) + n_free) n1) as Rr. 
-      erewrite rename_fvar_ind_proc with (R2 := Rf); auto.
+      erewrite rename_fvar_ind_proc with (R2 := Rf1); auto.
+      erewrite rename_fvar_ind_proc with (R2 := Rf2)
+          (R1 := (weaken_ren m0 (m1 + m_bbhs))); auto.
       erewrite rename_rvar_ind_proc with (R2 := Rr); auto.
 
-      assert (@ctxt_app _ (m1 + m0) m_free (zero m1 ⊗ G8) (zero m_free) ≡[m1 + m0 + m_free]
-          lctxt_rename Rf (@ctxt_app _ m0 (m1 + m_free) G8 (zero (m1 + m_free)))). {
-        rewrite <- (ctxt_app_null_l (zero 0) (G8 ⊗ zero (m1 + m_free))), <- app_zero.
+      assert (@ctxt_app _ (m1 + m0) (m_bbhs + m_hol) (zero m1 ⊗ G8) (zero (m_bbhs + m_hol)) ≡[m1 + m0 + (m_bbhs + m_hol)]
+          lctxt_rename Rf1 (@ctxt_app _ (m1 + m_bbhs) (m0 + m_hol) (zero (m1 + m_bbhs)) (G8 ⊗ zero m_hol))). {
         repeat rewrite ctxt_app_assoc.
-        replace (m1 + m0 + m_free) with (0 + m1 + m0 + m_free) by lia.
+        repeat rewrite <- app_zero.
+        replace (m1 + m0 + (m_bbhs + m_hol)) with (m1 + m0 + m_bbhs + m_hol) by lia.
         subst; rewrite ren_commute_str_lctxt_rename.
-        simpl; now rewrite ctxt_app_null_l.
+        now rewrite ctxt_app_assoc.
       }
-      rewrite H1; clear H1.
+      rewrite H; clear H.
+      replace (m1 + m0 + (m_bbhs + m_hol)) with (m1 + (m0 + m_bbhs) + m_hol) by lia;
+          apply rename_fvar_pres_wf;
+          try (subst; remember (ren_commute_str_wf_ren m1); now simpl in *); clear HeqRf1 Rf1.
+
+      assert (@ctxt_app _ (m1 + m_bbhs) (m0 + m_hol) (zero (m1 + m_bbhs)) (G8 ⊗ zero m_hol) ≡[m1 + (m_bbhs + m0) + m_hol]
+          lctxt_rename Rf2 (G8 ⊗ zero m_hol)). {
+        replace (m1 + (m_bbhs + m0) + m_hol) with ((m1 + m_bbhs) + (m0 + m_hol)) by lia.
+        subst; now rewrite weaken_ren_lctxt_rename.
+      }
+      rewrite H; clear H.
+      replace (m1 + (m_bbhs + m0) + m_hol) with (m1 + m_bbhs + (m0 + m_hol)) by lia;
+          apply rename_fvar_pres_wf;
+          try (subst; apply weaken_ren_wf_ren); clear HeqRf2 Rf2.
+
       assert (@ctxt_app _ (n1 + (n0 + 1)) n_free (zero n1 ⊗ (D8 ⊗ flat_ctxt 1 1)) (zero n_free)
           ≡[n1 + (n0 + 1) + n_free] (lctxt_rename Rr ((D8 ⊗ flat_ctxt 1 1) ⊗ zero n_free))). {
         replace (n1 + (n0 + 1) + n_free) with (n1 + (n0 + 1 + n_free)) by lia.
         subst; rewrite weaken_ren_lctxt_rename; now repeat rewrite ctxt_app_assoc.
       }
-      rewrite H1; clear H1.
-
-      apply rename_fvar_pres_wf; 
-          try (subst; remember (ren_commute_str_wf_ren 0); now simpl in *).
+      rewrite H; clear H.
       replace (n1 + (n0 + 1) + n_free) with (n1 + (n0 + 1 + n_free)) by lia;
-          apply rename_rvar_pres_wf; try (subst; apply weaken_ren_wf_ren).
+          apply rename_rvar_pres_wf; try (subst; apply weaken_ren_wf_ren); clear HeqRr Rr.
+      
       apply wf_weaken_free_vars with (m' := 0) (n' := n_free) in WFP.
       rewrite Nat.add_0_r, ctxt_app_l in WFP; simpl.
       now repeat rewrite Nat.add_assoc in *.
