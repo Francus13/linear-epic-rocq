@@ -1145,7 +1145,7 @@ Qed.
 
 
 
-(*
+
   (* bijections *)
 
   Lemma wf_ren_bFun : forall {n} (r : ren n n),
@@ -1181,9 +1181,10 @@ Qed.
   Proof.
     unfold surjective_ren.
     intros.
-    assert (bFun n r). apply wf_ren_bFun; auto.
+    assert (bFun n r) by now apply wf_ren_bFun.
     destruct (bSurjective_bBijective H1 H0) as [r_inv [HR HI]].
     exists (fun x => if lt_dec x n then r_inv x else n).
+
     split.
     - unfold wf_ren. intros.
       destruct (lt_dec x n); intros.
@@ -1191,14 +1192,13 @@ Qed.
       + split; intros. contradiction. lia.
     - unfold ren_inverses.
       intros.
-      destruct (lt_dec (r x) n).
-      + destruct (lt_dec x n).
-        * apply HI. assumption.
-        * contradiction.
-      + destruct (lt_dec x n).
-        * assert (r x < n). apply H1. assumption.
-          contradiction.
-        * contradiction.
+      destruct (lt_dec x n); destruct (lt_dec (r x) n).
+      + split; try apply HI. lia.
+      + assert (r x < n) by now apply H1. lia.
+      + split; try lia. intros; split.
+        * assert (r x >= n) by now apply H. lia.
+        * apply (H n); auto.
+      + split; try lia. intros; split; auto. apply (H n); auto.
   Qed.
   
   Definition bij_ren {n} (r : ren n n) :=
@@ -1295,36 +1295,28 @@ Ltac unfold_wf_bij_ren WBH :=
     - unfold ren_inverses.
       intros.
       unfold bij_app, ctxt_app.
-      split.
+      split; intros.
       + destruct (lt_dec x n).
-        * destruct (lt_dec (r1 x) n).
-          apply HI1. assumption.
-          assert (r1 x < n).
-          apply HWF1. assumption.
-          contradiction.
-        * destruct (lt_dec (n + r2 (x - n)) n).
-          lia.
-          assert (n + (r2 (x - n)) - n = r2 (x - n)) by lia.
-          rewrite H0.
-          assert (x - n < m) by lia.
+        * assert (r1 x < n) by now apply HWF1.
+          assert (r1_inv x < n) by now apply HR1.
+          lia_goal.
+          now apply HI1.
+        * lia_goal.
+          assert (forall r, n + (r (x - n)) - n = r (x - n)) by lia.
+          repeat rewrite H0; clear H0.
           assert (r2_inv (r2 (x - n)) = x - n).
-          { apply HI2. assumption. }
-          rewrite H2.
+          { apply HI2; lia. }
+          assert (r2 (r2_inv (x - n)) = x - n).
+          { apply HI2; lia. }
           lia.
-      + destruct (lt_dec x n).
-        * destruct (lt_dec (r1_inv x) n).
-          apply HI1. assumption.
-          assert (r1_inv x < n).
-          { apply HR1. assumption. }
-          lia.
-        * destruct (lt_dec (n + r2_inv (x -n)) n).
-          lia.
-          assert (n + r2_inv (x - n) - n = r2_inv (x - n)) by lia.
-          rewrite H0.
-          assert (x - n < m) by lia.
-          assert (r2(r2_inv (x - n)) = (x -n )).
-          { apply HI2. assumption. }
-          rewrite H2. lia.
+      + lia_goal.
+        assert (forall r, n + (r (x - n)) - n = r (x - n)) by lia.
+        repeat rewrite H0; clear H0.
+        assert (r2_inv (r2 (x - n)) >= m).
+        {  apply HI2; lia. }
+        assert (r2 (r2_inv (x - n)) >= m).
+        { apply HI2; lia. }
+        lia.
   Defined.
 
   Lemma bij_app_id : forall {n m},
@@ -1368,7 +1360,8 @@ Proof. auto. Qed.
   Proof. split; auto using bij_inv_wf, bij_inv_bij. Qed.
 
 
-  Lemma bij_inv_bij_inv_eq :
+(* This statement is not provable as the definitions lay *)
+  (* Lemma bij_inv_bij_inv_eq :
     forall {n} (r : ren n n) (HWB : wf_bij_ren r)
       (HBJI : bij_ren (bij_inv r HWB)),
       (bij_inv (bij_inv r HWB) HBJI) = r.
@@ -1396,7 +1389,7 @@ Proof. auto. Qed.
     assert (r' x = n). { apply WR'; auto. }
       assert (r x = n). { apply HWF; auto. }
       rewrite H. rewrite H0. reflexivity.
-  Qed.                               
+  Qed.                                *)
   
   Lemma bij_inv_app :
     forall {n m}
@@ -1410,7 +1403,8 @@ Proof. auto. Qed.
     reflexivity.
   Qed.                  
 
-  Lemma bij_ren_inv :
+  (* This one is also not true *)
+  (* Lemma bij_ren_inv :
     forall {n} (r : ren n n) (HWB : wf_bij_ren r),
       (ren_compose (bij_inv r HWB) r) = (ren_id n).
   Proof. intros.
@@ -1421,7 +1415,7 @@ Proof. auto. Qed.
     - apply HI. assumption.
     - assert (r_inv x = n). { apply HR. assumption. }
       rewrite H. apply HWF. lia.
-  Qed.
+  Qed. *)
 
   Lemma bij_ren_inv_elt :
     forall {n} (r : ren n n) (HWB : wf_bij_ren r) x,
@@ -1444,6 +1438,8 @@ Proof. auto. Qed.
     - apply HWF. assumption.
     - symmetry. apply HE. assumption.
   Qed.
+
+  (* TODO from here *)
 
   Lemma bij_ren_compose :
     forall {n} (r1 : ren n n) (r2 : ren n n)
@@ -1678,7 +1674,7 @@ Proof.
   2 : { apply H. }
   apply HR.
 Qed.  
-*)
+
   
 End Renamings.  
 
