@@ -1439,44 +1439,41 @@ Proof. auto. Qed.
     - symmetry. apply HE. assumption.
   Qed.
 
-  (* TODO from here *)
-
-  Lemma bij_ren_compose :
+  Lemma wf_bij_ren_compose :
     forall {n} (r1 : ren n n) (r2 : ren n n)
-      (HWB1 : wf_bij_ren r1) (HBJ2 : bij_ren r2),
-      bij_ren (ren_compose r1 r2).
+      (HWB1 : wf_bij_ren r1) (HBJ2 : wf_bij_ren r2),
+      wf_bij_ren (ren_compose r1 r2).
   Proof.
-    unfold bij_ren, ren_inverses, ren_compose. intros.
+    intros.
     destruct HWB1 as [HWF1 [r1_inv [HWF1' HEQ1]]].
-    destruct HBJ2 as [r2_inv [HWF2' HEQ2]].
+    destruct HBJ2 as [HWF2 [r2_inv [HWF2' HEQ2]]].
+    split; try apply wf_ren_compose; auto.
     exists (ren_compose r2_inv r1_inv).
+    split; try apply wf_ren_compose; auto.
     split.
-    - apply wf_ren_compose; auto.
-    - split.
-      + unfold ren_compose, compose.
-        assert ((r1 x) < n). { apply HWF1. auto. }
-        destruct (HEQ2 (r1 x) H0).
-        rewrite H1.
-        destruct (HEQ1 x H).
-        rewrite H3. reflexivity.
-      + unfold ren_compose, compose.
-        assert ((r2_inv x) < n). { apply HWF2'.  auto. } 
-        destruct (HEQ1 (r2_inv x) H0).
-        rewrite H2.
-        destruct (HEQ2 x H).
-        rewrite H4.
-        reflexivity.
+    - unfold ren_compose, compose; intros.
+      assert ((r1 x) < n). { apply HWF1. auto. }
+      assert ((r2_inv x) < n). { apply HWF2'. auto. }
+      destruct (HEQ2 (r1 x)); clear H3.
+      destruct (H2 H0); clear H2 H4.
+      rewrite H3; clear H3.
+      destruct (HEQ1 (r2_inv x)); clear H3.
+      destruct (H2 H1); clear H2 H3.
+      rewrite H4; clear H4.
+      split.
+      + now apply HEQ1.
+      + now apply HEQ2.
+    - unfold ren_compose, compose; intros.
+      split.
+      + apply HWF1'.
+        apply HEQ2.
+        now apply HWF1.
+      + apply HWF2.
+        apply HEQ1.
+        now apply HWF2'.
   Defined.
 
 
-Lemma wf_bij_ren_compose :
-  forall {n} (r1 : ren n n) (r2 : ren n n)
-    (HWB1 : wf_bij_ren r1) (HWB2 : wf_bij_ren r2),
-    wf_bij_ren (ren_compose r1 r2).
-Proof.
-  intros; remember HWB1 as HWB1_copy; split;
-  destruct HWB1; destruct HWB2; auto using wf_ren_compose, bij_ren_compose.
-Qed.
 
 Lemma compose_wf_bij_ren_ctxt_preservation :
   forall {X} (P : X -> Prop), 
@@ -1555,7 +1552,8 @@ Qed.
      out-of-scope variables to be canonical, lets us prove this
      equivalence.
    *) 
-  Lemma wf_bij_ren_app_inv_compose_id :
+  (* And so this isn't true with the new wf *)
+  (* Lemma wf_bij_ren_app_inv_compose_id :
     forall {n} (r : ren n n) (HWB : wf_bij_ren r),
       ren_compose r (bij_inv r HWB) = ren_id n.
   Proof.
@@ -1572,7 +1570,7 @@ Qed.
       rewrite H.
       apply HR.
       lia.
-  Qed. 
+  Qed.  *)
 
   Lemma bij_ren_var :
     forall {n} (r : ren n n) x y
@@ -1586,12 +1584,8 @@ Qed.
     simpl.
     unfold ren_inverses in HE.
     split; intros; subst.
-    - specialize (HE _ H).
-      destruct HE.
-      rewrite H1. reflexivity.
-    - specialize (HE _ H0).
-      destruct HE.
-      assumption.
+    - symmetry; now apply HE.
+    - now apply HE.
   Qed.
       
   Lemma ren_delta_compose :
@@ -1624,8 +1618,7 @@ Qed.
       unfold ren_inverses in HEQ.
       assert (x = (r y)).
       { specialize (HEQ x); destruct HEQ. 
-        assumption.
-        subst; symmetry; assumption. }
+        subst; symmetry. now apply H0. }
       contradiction.
   Qed.
 

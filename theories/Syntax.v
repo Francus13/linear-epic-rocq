@@ -1236,13 +1236,7 @@ t1 seq t1' peq t2 => t1 aeq t2
 
 symmetry, reflexivity, transitivity of aeq *)
 
-
-(* FRAN: Commented this out 5/12/2026.
-          This doesn't work with new definition of wf_ren.
-          There could be two wf_ren judgements,
-          but I'll leave it as is until
-          there's a reason to have nu equivalence around. *)
-(* nu equivalence --------------------------------------------------------
+(* nu equivalence -------------------------------------------------------- *)
 (* The "nu-bound" variables within a bag can be permuted without affecting the
 meaning of the term.
 
@@ -1290,6 +1284,11 @@ with peq_proc : forall (m n : nat) (bf : ren m m) (br : ren n n), proc -> proc -
     peq_proc m n bf br P1 P1' ->
     peq_proc m n bf br P2 P2' ->
     peq_proc m n bf br (par P1 P2) (par P1' P2')
+
+| peq_req : forall m n r1 r2 (HR1 : r1 < n) (HR2 : r2 < n)
+    (bf : ren m m)
+    (br : ren n n),
+    peq_proc m n bf br (req r1 r2) (req (br r1) (br r2))
 
 | peq_nul : forall m n
     (bf : ren m m)
@@ -1641,5 +1640,5 @@ Proof.
       repeat rewrite ren_compose_app; auto using bij_inv_wf_bij.
       repeat rewrite bij_app_inv.
       apply H; auto.
-Qed.     *)
+Qed.
 
