@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A Rocq (Coq) formalization of a linear, opportunistic lambda calculus ("LEpic"). It targets **Rocq 9.0**, uses the `Stdlib` library (`From Stdlib Require Import ...`, not `Coq.`), and `Permutations.v` also needs the `Equations` plugin. This is research code: proofs are still in progress, and some lemmas end in `Admitted` or contain `admit`.
 
+**Toolchain:** use the `default` opam switch, which has Rocq 9.0.0 compiled with OCaml 5.3.0, `rocq-equations` and `vsrocq-language-server`. VSRocq uses `~/.opam/default/bin/vsrocqtop` (the `vsrocq.path` setting in the Windows VSCode user settings). The `.vo` files must be compiled by the same Rocq/OCaml build that VSRocq runs. If VSRocq reports "compiled with OCaml X while this instance … compiled with OCaml Y", delete the stale `.vo` files and rebuild. `make clean` does not remove `.vo` files of files that aren't in `_CoqConfig`, and make treats an old `.vo` as up to date.
+
 ## Build
 
 Run these from the repo root:
@@ -16,13 +18,13 @@ Run these from the repo root:
 
 To add or remove a file from the build, edit **`_CoqConfig`**. `_CoqProject` is generated from it, so edits to `_CoqProject` are overwritten. The logical path is `-Q theories LEpic`, so files import each other with `From LEpic Require Import ...`.
 
-`theories/Examples.v` and `theories/OldSemanticsProofs.v` are not in `_CoqConfig`, so `make` does not build them. `OldSemanticsProofs.v` holds an older version of the semantics and its proofs, kept for reference.
+`theories/Permutations.v`, `theories/Examples.v` and `theories/OldSemanticsProofs.v` are not in `_CoqConfig`, so `make` does not build them. To check one of them, compile it directly with `rocq compile -Q theories LEpic ...`. `OldSemanticsProofs.v` holds an older version of the semantics and its proofs, kept for reference.
 
 There is no test suite. A file is correct when it compiles. To list the proofs that are still open, run `grep -n "Admitted\|admit\." theories/*.v`.
 
 ## Architecture
 
-The dependency chain is: `Contexts` → `Syntax` → `EvalContexts` → `Semantics` → `Confluence`. `Observations` depends only on `Contexts` and `Syntax`. `Permutations` stands alone: it has its own `bij` datatype (built from id, swap, comp and plus), and no other file imports it yet.
+The dependency chain is: `Contexts` → `Syntax` → `EvalContexts` → `Semantics` → `Confluence`. `Observations` depends only on `Contexts` and `Syntax`. `Permutations` stands alone and is not part of the build: it has its own `bij` datatype (built from id, swap, comp and plus), and no other file imports it.
 
 - **`Contexts.v`**: contexts are functions. `ctxt n X := var -> X`, and `lctxt n := ctxt n nat` counts how many times each variable is used.
   - Basic operations: `sum`, `zero`, `one`, `delta`, `⊗` (append) and `SUM`. Equality is pointwise (`ctxt_eq`).
@@ -42,12 +44,13 @@ The dependency chain is: `Contexts` → `Syntax` → `EvalContexts` → `Semanti
   - `ws_*`: well-scoped.
   - `seq_*`: structural equivalence, written `≈t`. It lets processes be permuted.
   - `wf_*`: well-formed, meaning scoping plus linearity. Function variables are used once each. Each resource variable has a usage count of 0 or 2, and free resources are used exactly once.
-  - `peq_*`: renaming by a bijection.
+  - `aeq_*`: alpha equivalence, i.e. renaming by a bijection (formerly `peq_*`). `aeq_term m n bf br` carries the outer renamings `bf`/`br`.
+  - `neq_term`/`neq_proc`/`neq_oper`: nu-equivalence. These fix the outer renamings to `ren_id` and quantify existentially over the scope `m n`, so only bound variables are permuted. Notation: `[t≡ ]`. They form a PER whose domain is the well-scoped syntax. Transitivity relies on `aeq_rescope_tpo`, which moves an `aeq_term` to another scope the term is well scoped in.
 
   `rename_rvar_*` and `rename_fvar_*` apply renamings. `dest_conj_disj_exist` and `existT_eq` are helper tactics.
 - **`EvalContexts.v`**: evaluation contexts (`EC_term` / `EC_proc`, with a hole `Ehol`). Notation: `Et <=[ P ]` fills the hole with a process, and `Et <=<[ EP ]` fills it with another context. The "hole scope" is the innermost `bag` around the hole, and many helpers (`split_hole_scope`, `mutate_hole_scope`, `bound_*vars_*`) work with it. `wf_EC_term` tracks how many variables are in scope at the hole, and `wf_hs_fun` states that a function on contexts preserves well-formedness.
 - **`Semantics.v`**: `prim_step` defines the reduction rules on filled evaluation contexts: par-nul, emp cut, tup cut, application in the same scope or a different scope, and `req` renaming. `step` is `prim_step` up to `≈t` on both sides, and `multi_step` is its reflexive-transitive closure. This file also proves `wf_prim_step`, which is preservation for primitive steps.
-- **`Confluence.v`**: lifts preservation to `step` (`wf_step`, admitted) and defines alpha equivalence: `aeq m n t1 t2 := exists t1', t1 ≈t t1' /\ peq_t m n t1' t2`. The `confluence` lemma is stated, and its proof is an outline of `admit`ted cases.
+- **`Confluence.v`**: lifts preservation to `step` (`wf_step`, admitted) and proves renaming lemmas relating `aeq_*`, `seq_*` and the `rename_*` functions. The (currently commented-out) `aeq` combines structural equivalence with nu-equivalence: `exists t1', t1 ≈t t1' /\ neq_term t1' t2`. The `confluence` lemma is stated, and its proof is an outline of `admit`ted cases.
 - **`Observations.v`**: a first draft of observations and a machine semantics.
 
 ## Conventions

@@ -614,7 +614,8 @@ Ltac existT_eq :=
 
 (* Prove that well-formedness respects structural equivalence. *)
 
-(* It seems that the trick for this proof is to close under commutatitivy explicitly. *)
+(* It seems that the trick for this proof is to close 
+    under commutatitivy explicitly. *)
 Lemma tpo_wf_seq :
   (forall t1 t2,
       t1 ≈t t2 ->
@@ -1230,30 +1231,25 @@ Qed.
 
 
 
-(* TODO? alpha-equivalence 
 
-t1 seq t1' peq t2 => t1 aeq t2 
 
-symmetry, reflexivity, transitivity of aeq *)
+(* Alpha Equivalence -------------------------------------------------------- *)
+(* The variables within a bag can be permuted without affecting the
+   meaning of the term.
 
-(* nu equivalence -------------------------------------------------------- *)
-(* The "nu-bound" variables within a bag can be permuted without affecting the
-meaning of the term.
-
-   That means that [bag m' n' P] is "permutation equivalent" to [bag m' n' P'] when
+   That means that [bag m' n' P] is "alpha equivalent" to [bag m' n' P'] when
    we rename (in P and P') the [m'] bound function identifiers 
    and [n'] bound identifiers up to some bijection.
 
-   Permutation equivalence is also parameterized by two renamings that are used
+   Alpha equivalence is also parameterized by two renamings that are used
    when passing outer permutations (of m and n variables) inwards. As such, two terms are truly
-   permutation equivalent when these renaming parameters are identities (or m and n are 0).
-
+   alpha equivalent when these renaming parameters are identities (or m and n are 0).
 *)
 
 Unset Elimination Schemes.
-Inductive peq_term :
+Inductive aeq_term :
   forall (m n:nat) (bf : ren m m) (br : ren n n) , term -> term -> Prop :=
-| peq_bag :
+| aeq_bag :
   forall m n m' n'
     (bf : ren m m)
     (br : ren n n)
@@ -1262,104 +1258,103 @@ Inductive peq_term :
     (WBF' : wf_bij_ren bf')
     (WBR' : wf_bij_ren br')
     (P P' : proc)
-    (EQP : peq_proc (m' + m) (n' + n) (bij_app bf' bf) (bij_app br' br) P P')
-  ,
-    peq_term m n bf br (bag m' n' P) (bag m' n' P')
+    (EQP : aeq_proc (m' + m) (n' + n) (bij_app bf' bf) (bij_app br' br) P P'),
+    aeq_term m n bf br (bag m' n' P) (bag m' n' P')
              
-with peq_proc : forall (m n : nat) (bf : ren m m) (br : ren n n), proc -> proc -> Prop :=
-| peq_def : forall m n r (HR : r < n) o o'
+with aeq_proc : forall (m n : nat) (bf : ren m m) (br : ren n n), proc -> proc -> Prop :=
+| aeq_def : forall m n r (HR : r < n) o o'
     (bf : ren m m)
     (br : ren n n),
-    peq_oper m n bf br o o' ->
-    peq_proc m n bf br (def r o) (def (br r) o')
+    aeq_oper m n bf br o o' ->
+    aeq_proc m n bf br (def r o) (def (br r) o')
 
-| peq_app : forall m n f (HF : f < m) r (HR : r < n)
+| aeq_app : forall m n f (HF : f < m) r (HR : r < n)
     (bf : ren m m)
     (br : ren n n),
-    peq_proc m n bf br (app f r) (app (bf f) (br r))
+    aeq_proc m n bf br (app f r) (app (bf f) (br r))
 
-| peq_par : forall m n P1 P1' P2 P2'
+| aeq_par : forall m n P1 P1' P2 P2'
     (bf : ren m m)
     (br : ren n n),
-    peq_proc m n bf br P1 P1' ->
-    peq_proc m n bf br P2 P2' ->
-    peq_proc m n bf br (par P1 P2) (par P1' P2')
+    aeq_proc m n bf br P1 P1' ->
+    aeq_proc m n bf br P2 P2' ->
+    aeq_proc m n bf br (par P1 P2) (par P1' P2')
 
-| peq_req : forall m n r1 r2 (HR1 : r1 < n) (HR2 : r2 < n)
+| aeq_req : forall m n r1 r2 (HR1 : r1 < n) (HR2 : r2 < n)
     (bf : ren m m)
     (br : ren n n),
-    peq_proc m n bf br (req r1 r2) (req (br r1) (br r2))
+    aeq_proc m n bf br (req r1 r2) (req (br r1) (br r2))
 
-| peq_nul : forall m n
+| aeq_nul : forall m n
     (bf : ren m m)
     (br : ren n n),
-    peq_proc m n bf br nul nul
+    aeq_proc m n bf br nul nul
              
-with peq_oper : forall (m n : nat) (bf : ren m m) (br : ren n n), oper -> oper -> Prop :=
-| peq_emp : forall m n
+with aeq_oper : forall (m n : nat) (bf : ren m m) (br : ren n n), oper -> oper -> Prop :=
+| aeq_emp : forall m n
     (bf : ren m m)
     (br : ren n n),
-    peq_oper m n bf br emp emp
+    aeq_oper m n bf br emp emp
 
-| peq_tup : forall m n r1 (HR1 : r1 < n) r2 (HR2 : r2 < n)
+| aeq_tup : forall m n r1 (HR1 : r1 < n) r2 (HR2 : r2 < n)
     (bf : ren m m)
     (br : ren n n),
-    peq_oper m n bf br (tup r1 r2) (tup (br r1) (br r2))
+    aeq_oper m n bf br (tup r1 r2) (tup (br r1) (br r2))
 
-| peq_bng : forall m n f (HF : f < m)
+| aeq_bng : forall m n f (HF : f < m)
     (bf : ren m m)
     (br : ren n n),
-    peq_oper m n bf br (bng f) (bng (bf f))
+    aeq_oper m n bf br (bng f) (bng (bf f))
 
-| peq_lam : forall m n t t'
+| aeq_lam : forall m n t t'
     (bf : ren m m)
     (br : ren n n),
-    peq_term m 1 bf (ren_id 1) t t' ->
-    peq_oper m n bf br (lam t) (lam t').
+    aeq_term m 1 bf (ren_id 1) t t' ->
+    aeq_oper m n bf br (lam t) (lam t').
 (* FRAN: We may need to allow the parameter variable to permute? *)
 Set Elimination Schemes.
 
-Hint Constructors peq_term peq_proc peq_oper : core.
+Hint Constructors aeq_term aeq_proc aeq_oper : core.
 
-Scheme peq_term_ind := Induction for peq_term Sort Prop
-    with peq_proc_ind := Induction for peq_proc Sort Prop
-                         with peq_oper_ind := Induction for peq_oper Sort Prop.
+Scheme aeq_term_ind := Induction for aeq_term Sort Prop
+    with aeq_proc_ind := Induction for aeq_proc Sort Prop
+                         with aeq_oper_ind := Induction for aeq_oper Sort Prop.
 
-Combined Scheme peq_tpo_ind from peq_term_ind, peq_proc_ind, peq_oper_ind.
+Combined Scheme aeq_tpo_ind from aeq_term_ind, aeq_proc_ind, aeq_oper_ind.
 
 
-(* PEQ is transitive with the compositions of renamings *)
-Lemma peq_compose_tpo :
+(* AEQ is transitive with the compositions of renamings *)
+Lemma aeq_compose_tpo :
   (forall (m n:nat) (bf : ren m m) (br : ren n n) (t t' : term)
-     (HT: peq_term m n bf br t t'),
+     (HT: aeq_term m n bf br t t'),
     forall (WBF : wf_bij_ren bf) (WBR : wf_bij_ren br)
       (bf' : ren m m) (br' : ren n n) (t'' : term)
       (WBF' : wf_bij_ren bf') (WBF' : wf_bij_ren br')    
-      (HT' : peq_term m n bf' br' t' t''),
-      peq_term m n (ren_compose bf bf') (ren_compose br br') t t'')
+      (HT' : aeq_term m n bf' br' t' t''),
+      aeq_term m n (ren_compose bf bf') (ren_compose br br') t t'')
   /\
   (forall (m n:nat) (bf : ren m m) (br : ren n n) (P P' : proc)
-     (HT: peq_proc m n bf br P P'),
+     (HT: aeq_proc m n bf br P P'),
     forall (WBF : wf_bij_ren bf) (WBR : wf_bij_ren br)   
       (bf' : ren m m) (br' : ren n n) (P'' : proc)
       (WBF' : wf_bij_ren bf') (WBF' : wf_bij_ren br')             
-      (HT' : peq_proc m n bf' br' P' P''),
-      peq_proc m n (ren_compose bf bf') (ren_compose br br') P P'')
+      (HT' : aeq_proc m n bf' br' P' P''),
+      aeq_proc m n (ren_compose bf bf') (ren_compose br br') P P'')
   /\
   (forall (m n:nat) (bf : ren m m) (br : ren n n) (o o' : oper)
-     (HT: peq_oper m n bf br o o'),
+     (HT: aeq_oper m n bf br o o'),
     forall (WBF : wf_bij_ren bf) (WBR : wf_bij_ren br)   
       (bf' : ren m m) (br' : ren n n) (o'' : oper)
       (WBF' : wf_bij_ren bf') (WBF' : wf_bij_ren br')            
-      (HT' : peq_oper m n bf' br' o' o''),
-      peq_oper m n (ren_compose bf bf') (ren_compose br br') o o'').
+      (HT' : aeq_oper m n bf' br' o' o''),
+      aeq_oper m n (ren_compose bf bf') (ren_compose br br') o o'').
 Proof.
-  (* Induct on the first peq *)
-  apply peq_tpo_ind; intros.
-  (* Invert the second peq *)
+  (* Induct on the first aeq *)
+  apply aeq_tpo_ind; intros.
+  (* Invert the second aeq *)
   all: inversion HT'; existT_eq; subst; auto.
   (* Most cases solved by composing the renamings,
-      followed by the corresponding peq constructor and IHs *)
+      followed by the corresponding aeq constructor and IHs *)
   all: try solve [
     repeat rewrite (ren_compose_correct br br'); 
     repeat rewrite (ren_compose_correct bf bf');
@@ -1370,7 +1365,7 @@ Proof.
     (* Construct what the composed renamings will be *)
     + eapply wf_bij_ren_compose. apply WBF'. apply WBF'2.
     + eapply wf_bij_ren_compose. apply WBR'. apply WBR'0.
-    (* Processes are peq by IH 
+    (* Processes are aeq by IH 
         (which requires the composed renamings be wf and bij) *)
     + rewrite <- wf_bij_ren_app_compose; auto.
       rewrite <- wf_bij_ren_app_compose; auto.
@@ -1379,29 +1374,29 @@ Proof.
   - econstructor.
     (* Introduce an identity renaming to compose with *)
     rewrite <- (ren_compose_id_r (ren_id 1) wf_bij_ren_id).
-    (* Terms are peq by IH *)
+    (* Terms are aeq by IH *)
     apply H; auto using wf_bij_ren_id.
 Qed.
 
 
-(* PEQ is symmetric with the inverse renamings *)
-Lemma peq_inv_tpo :
+(* AEQ is symmetric with the inverse renamings *)
+Lemma aeq_inv_tpo :
   (forall (m n:nat) (bf : ren m m) (br : ren n n) (t t' : term)
-     (HT: peq_term m n bf br t t'),
+     (HT: aeq_term m n bf br t t'),
     forall (WBF : wf_bij_ren bf) (WBR : wf_bij_ren br),
-      peq_term m n (bij_inv bf WBF) (bij_inv br WBR) t' t)
+      aeq_term m n (bij_inv bf WBF) (bij_inv br WBR) t' t)
   /\
   (forall (m n:nat) (bf : ren m m) (br : ren n n) (P P' : proc)
-     (HT: peq_proc m n bf br P P'),
+     (HT: aeq_proc m n bf br P P'),
     forall (WBF : wf_bij_ren bf) (WBR : wf_bij_ren br),
-      peq_proc m n (bij_inv bf WBF) (bij_inv br WBR) P' P)
+      aeq_proc m n (bij_inv bf WBF) (bij_inv br WBR) P' P)
   /\
   (forall (m n:nat) (bf : ren m m) (br : ren n n) (o o' : oper)
-     (HT: peq_oper m n bf br o o'),
+     (HT: aeq_oper m n bf br o o'),
     forall (WBF : wf_bij_ren bf) (WBR : wf_bij_ren br),
-      peq_oper m n (bij_inv bf WBF) (bij_inv br WBR) o' o).
+      aeq_oper m n (bij_inv bf WBF) (bij_inv br WBR) o' o).
 Proof.
-  apply peq_tpo_ind; intros.
+  apply aeq_tpo_ind; intros.
   (* Most cases are by IH after expanding x to ((bij_inv r _) (r x)) *)
   (* FRAN: Can't figure out how to make this cleanly repeat without diverging *)
   all: try solve [auto;
@@ -1429,7 +1424,7 @@ Proof.
       end; 
     constructor; repeat try (apply WBF; auto); repeat try (apply WBR; auto); auto]. 
   (* Bag *)
-  - apply peq_bag with (bf' := bij_inv bf' WBF') (br' := bij_inv br' WBR').
+  - apply aeq_bag with (bf' := bij_inv bf' WBF') (br' := bij_inv br' WBR').
     1, 2: auto using bij_inv_wf_bij.
     rewrite <- bij_inv_app with (HWB1 := WBF')(HWB2 := WBF).    
     rewrite <- bij_inv_app with (HWB1 := WBR')(HWB2 := WBR).
@@ -1441,17 +1436,17 @@ Proof.
 Qed.
 
 
-(* PEQ is reflexive on "well scoped" terms using the appropriate identity renamings *)
-Lemma peq_id_refl_tpo :
+(* AEQ is reflexive on "well scoped" terms using the appropriate identity renamings *)
+Lemma aeq_id_refl_tpo :
   (forall m n (t : term),
       ws_term m n t ->
-      peq_term m n (ren_id m) (ren_id n) t t)
+      aeq_term m n (ren_id m) (ren_id n) t t)
   /\ (forall m n (P : proc),
         ws_proc m n P ->
-        peq_proc m n (ren_id m) (ren_id n) P P)
+        aeq_proc m n (ren_id m) (ren_id n) P P)
   /\ (forall m n (o : oper),
         ws_oper m n o ->
-        peq_oper m n (ren_id m) (ren_id n) o o).
+        aeq_oper m n (ren_id m) (ren_id n) o o).
 Proof.
   apply ws_tpo_ind; intros.
   (* Most cases are by IH after expanding x to ((ren_id _) x) *)
@@ -1475,104 +1470,181 @@ Qed.
 
 
 
-(* We can existentially quantify over the renamings to get a "permutation"
+(* Alpha equivalence only relates well-scoped syntax *)
+Lemma aeq_ws_tpo :
+  (forall m n bf br (t t' : term), aeq_term m n bf br t t' -> ws_term m n t)
+  /\ (forall m n bf br (P P' : proc), aeq_proc m n bf br P P' -> ws_proc m n P)
+  /\ (forall m n bf br (o o' : oper), aeq_oper m n bf br o o' -> ws_oper m n o).
+Proof.
+  apply aeq_tpo_ind; intros; constructor; auto.
+Qed.
+
+(* ... and when the renamings are well formed, the right-hand side is
+   well scoped too *)
+Lemma aeq_ws_r_tpo :
+  (forall m n bf br (t t' : term), aeq_term m n bf br t t' ->
+      wf_ren bf -> wf_ren br -> ws_term m n t')
+  /\ (forall m n bf br (P P' : proc), aeq_proc m n bf br P P' ->
+      wf_ren bf -> wf_ren br -> ws_proc m n P')
+  /\ (forall m n bf br (o o' : oper), aeq_oper m n bf br o o' ->
+      wf_ren bf -> wf_ren br -> ws_oper m n o').
+Proof.
+  apply aeq_tpo_ind; intros; constructor;
+    try solve [eauto | apply H; auto | apply H0; auto | apply H1; auto].
+  (* Bag *)
+  - apply H; apply wf_bij_app; auto; apply proj_wf_ren; auto.
+  (* Lam *)
+  - apply H; auto using wf_ren_id.
+Qed.
+
+(* Alpha equivalence only depends on the renamings at the variables that are
+   in scope, so it can be moved to any other scope the term is well scoped in *)
+Lemma aeq_rescope_tpo :
+  (forall m n bf br (t t' : term), aeq_term m n bf br t t' ->
+    forall m2 n2 (bf2 : ren m2 m2) (br2 : ren n2 n2),
+      ws_term m2 n2 t ->
+      (forall x, x < m -> x < m2 -> bf2 x = bf x) ->
+      (forall x, x < n -> x < n2 -> br2 x = br x) ->
+      aeq_term m2 n2 bf2 br2 t t')
+  /\ (forall m n bf br (P P' : proc), aeq_proc m n bf br P P' ->
+    forall m2 n2 (bf2 : ren m2 m2) (br2 : ren n2 n2),
+      ws_proc m2 n2 P ->
+      (forall x, x < m -> x < m2 -> bf2 x = bf x) ->
+      (forall x, x < n -> x < n2 -> br2 x = br x) ->
+      aeq_proc m2 n2 bf2 br2 P P')
+  /\ (forall m n bf br (o o' : oper), aeq_oper m n bf br o o' ->
+    forall m2 n2 (bf2 : ren m2 m2) (br2 : ren n2 n2),
+      ws_oper m2 n2 o ->
+      (forall x, x < m -> x < m2 -> bf2 x = bf x) ->
+      (forall x, x < n -> x < n2 -> br2 x = br x) ->
+      aeq_oper m2 n2 bf2 br2 o o').
+Proof.
+  apply aeq_tpo_ind; intros.
+  (* Except for bags, rewrite each renamed variable to use the new renamings *)
+  all: try solve [match goal with
+       | [ HW : ws_proc _ _ _ |- _ ] => inversion HW; subst
+       | [ HW : ws_oper _ _ _ |- _ ] => inversion HW; subst
+       end;
+    repeat match goal with
+      | [ HR : forall x, x < ?k -> x < ?k2 -> ?r2 x = ?r x,
+          _ : ?y < ?k, _ : ?y < ?k2 |- context[?r ?y] ] =>
+          rewrite <- (HR y) by auto
+      end;
+    constructor; eauto].
+  (* Bag: the bound renamings stay the same, the outer ones are shifted *)
+  inversion H0; subst.
+  apply aeq_bag with (bf' := bf') (br' := br'); auto.
+  apply H; auto.
+  - intros; unfold bij_app, ctxt_app.
+    destruct (lt_dec x m'); auto.
+    f_equal; apply H1; lia.
+  - intros; unfold bij_app, ctxt_app.
+    destruct (lt_dec x n'); auto.
+    f_equal; apply H2; lia.
+Qed.
+
+
+
+
+(* We can existentially quantify over the renamings to get a "nu"
    equivalence on syntax directly.  These relations are what actually formed
    a partial equivalence relation (PER).
  *)
 
- (* FRAN: Why are these parameterized by their variable bindings? *)
+Inductive neq_term (t t' : term) : Prop :=
+| neq_term_intro :
+  forall m n
+    (EQ : aeq_term m n (ren_id m) (ren_id n) t t'),
+    neq_term t t'.
 
-Inductive peq_t (m n : nat) (t t' : term) : Prop :=
-| peq_t_intro :
-  forall (bf : ren m m) (br : ren n n)
-    (WBF : wf_bij_ren bf) (WBR : wf_bij_ren br)
-    (EQ : peq_term m n bf br t t'),
-    peq_t m n t t'.
+Inductive neq_proc (P P' : proc) : Prop :=
+| neq_proc_intro :
+  forall m n
+    (EQ : aeq_proc m n (ren_id m) (ren_id n) P P'),
+    neq_proc P P'.
 
-Inductive peq_p (m n : nat) (P P' : proc) : Prop :=
-| peq_p_intro :
-  forall (bf : ren m m) (br : ren n n)
-    (WBF : wf_bij_ren bf) (WBR : wf_bij_ren br)
-    (EQ : peq_proc m n bf br P P'),
-    peq_p m n P P'.
+Inductive neq_oper (o o' : oper) : Prop :=
+| neq_oper_intro :
+  forall m n
+    (EQ : aeq_oper m n (ren_id m) (ren_id n) o o'),
+    neq_oper o o'.
 
-Inductive peq_o (m n : nat) (o o' : oper) : Prop :=
-| peq_o_intro :
-  forall (bf : ren m m) (br : ren n n)
-    (WBF : wf_bij_ren bf) (WBR : wf_bij_ren br)
-    (EQ : peq_oper m n bf br o o'),
-    peq_o m n o o'.
+Infix "[t≡ ]" := (neq_term) (at level 55).
+Infix "[p≡ ]" := (neq_proc) (at level 55).
+Infix "[o≡ ]" := (neq_oper) (at level 55).
 
-Infix "[t≡ m n ]" := (peq_t m n) (at level 55).
-Infix "[p≡ m n ]" := (peq_p m n) (at level 55).
-Infix "[o≡ m n ]" := (peq_o m n) (at level 55).
-
-Lemma peq_t_refl : forall m n t,
+Lemma neq_term_refl : forall m n t,
     ws_term m n t ->
-    peq_t m n t t.
-Proof. specialize (peq_id_refl_tpo); intros.
-  destruct H as [HT _].
-  specialize (HT m n t H0).
-  econstructor; eauto using wf_bij_ren_id. Qed.
-Lemma peq_p_refl : forall m n P,
+    t [t≡ ] t.
+Proof. intros. apply neq_term_intro with (m := m) (n := n).
+  apply aeq_id_refl_tpo; auto. Qed.
+Lemma neq_proc_refl : forall m n P,
     ws_proc m n P ->
-    peq_p m n P P.
-Proof. specialize (peq_id_refl_tpo); intros.
-  destruct H as [_ [HP _]].
-  specialize (HP m n P  H0).
-  econstructor; eauto using wf_bij_ren_id. Qed.
-Lemma peq_o_refl : forall m n o,
+    P [p≡ ] P.
+Proof. intros. apply neq_proc_intro with (m := m) (n := n).
+  apply aeq_id_refl_tpo; auto. Qed.
+Lemma neq_oper_refl : forall m n o,
     ws_oper m n o ->
-    peq_o m n o o.
-Proof. specialize (peq_id_refl_tpo); intros.
-  destruct H as [_ [_ HO]].
-  specialize (HO m n o H0).
-  econstructor; eauto using wf_bij_ren_id. Qed.
+    o [o≡ ] o.
+Proof. intros. apply neq_oper_intro with (m := m) (n := n).
+  apply aeq_id_refl_tpo; auto. Qed.
 
-#[global] Instance Transitive_peq_term {m n} : Transitive (peq_t m n).
-Proof. unfold Transitive; intros. inversion H; inversion H0. econstructor.
-  3 : eapply peq_compose_tpo; eauto. 
-  all: auto using wf_bij_ren_compose. Qed.
-#[global] Instance Transitive_peq_proc {m n} : Transitive (peq_p m n).
-Proof. unfold Transitive; intros. inversion H; inversion H0. econstructor.
-  3 : eapply peq_compose_tpo; eauto. 
-  all: auto using wf_bij_ren_compose. Qed.
-#[global] Instance Transitive_peq_oper {m n} : Transitive (peq_o m n).
-Proof. unfold Transitive; intros. inversion H; inversion H0. econstructor.
-  3 : eapply peq_compose_tpo; eauto. 
-  all: auto using wf_bij_ren_compose. Qed.
+(* The two equivalences may be at different scopes, so move the second one
+   into the scope of the first before composing them *)
+#[global] Instance Transitive_neq_term : Transitive neq_term.
+Proof. unfold Transitive; intros t t' t'' [m n EQ1] [m' n' EQ2].
+  apply neq_term_intro with (m := m) (n := n).
+  assert (EQ2' : aeq_term m n (ren_id m) (ren_id n) t' t'').
+  { eapply aeq_rescope_tpo; eauto.
+    eapply aeq_ws_r_tpo; eauto using wf_ren_id. }
+  exact (proj1 aeq_compose_tpo _ _ _ _ _ _ EQ1 wf_bij_ren_id wf_bij_ren_id
+           _ _ _ wf_bij_ren_id wf_bij_ren_id EQ2'). Qed.
+#[global] Instance Transitive_neq_proc : Transitive neq_proc.
+Proof. unfold Transitive; intros P P' P'' [m n EQ1] [m' n' EQ2].
+  apply neq_proc_intro with (m := m) (n := n).
+  assert (EQ2' : aeq_proc m n (ren_id m) (ren_id n) P' P'').
+  { eapply aeq_rescope_tpo; eauto.
+    eapply aeq_ws_r_tpo; eauto using wf_ren_id. }
+  exact (proj1 (proj2 aeq_compose_tpo) _ _ _ _ _ _ EQ1 wf_bij_ren_id wf_bij_ren_id
+           _ _ _ wf_bij_ren_id wf_bij_ren_id EQ2'). Qed.
+#[global] Instance Transitive_neq_oper : Transitive neq_oper.
+Proof. unfold Transitive; intros o o' o'' [m n EQ1] [m' n' EQ2].
+  apply neq_oper_intro with (m := m) (n := n).
+  assert (EQ2' : aeq_oper m n (ren_id m) (ren_id n) o' o'').
+  { eapply aeq_rescope_tpo; eauto.
+    eapply aeq_ws_r_tpo; eauto using wf_ren_id. }
+  exact (proj2 (proj2 aeq_compose_tpo) _ _ _ _ _ _ EQ1 wf_bij_ren_id wf_bij_ren_id
+           _ _ _ wf_bij_ren_id wf_bij_ren_id EQ2'). Qed.
 
-#[global] Instance Symmetric_peq_term {m n} : Symmetric (peq_t m n).
-Proof. unfold Symmetric; intros. inversion H.
-  apply peq_t_intro with (bf := bij_inv bf WBF)(br := bij_inv br WBR).
-  1, 2 : auto using bij_inv_wf_bij.
-  apply peq_inv_tpo; auto. Qed.
-#[global] Instance Symmetric_peq_proc {m n} : Symmetric (peq_p m n).
-Proof. unfold Symmetric; intros. inversion H.
-  apply peq_p_intro with (bf := bij_inv bf WBF)(br := bij_inv br WBR).
-  1, 2 : auto using bij_inv_wf_bij.
-  apply peq_inv_tpo; auto. Qed.
-#[global] Instance Symmetric_peq_oper {m n} : Symmetric (peq_o m n).
-Proof. unfold Symmetric; intros. inversion H.
-  apply peq_o_intro with (bf := bij_inv bf WBF)(br := bij_inv br WBR).
-  1, 2 : auto using bij_inv_wf_bij.
-  apply peq_inv_tpo; auto. Qed.
+(* The inverse of the identity renaming is the identity *)
+#[global] Instance Symmetric_neq_term : Symmetric neq_term.
+Proof. unfold Symmetric; intros t t' [m n EQ].
+  apply neq_term_intro with (m := m) (n := n).
+  exact (proj1 aeq_inv_tpo _ _ _ _ _ _ EQ wf_bij_ren_id wf_bij_ren_id). Qed.
+#[global] Instance Symmetric_neq_proc : Symmetric neq_proc.
+Proof. unfold Symmetric; intros P P' [m n EQ].
+  apply neq_proc_intro with (m := m) (n := n).
+  exact (proj1 (proj2 aeq_inv_tpo) _ _ _ _ _ _ EQ wf_bij_ren_id wf_bij_ren_id). Qed.
+#[global] Instance Symmetric_neq_oper : Symmetric neq_oper.
+Proof. unfold Symmetric; intros o o' [m n EQ].
+  apply neq_oper_intro with (m := m) (n := n).
+  exact (proj2 (proj2 aeq_inv_tpo) _ _ _ _ _ _ EQ wf_bij_ren_id wf_bij_ren_id). Qed.
 
 
-(* Well-formedness also respects permutation equivalence, but we have to compose
+(* Well-formedness also respects alpha equivalence, but we have to compose
    the context with the *inverse* renaming to explain how the book keeping works
    out.  *) 
-Lemma peq_wf_tpo :
+Lemma aeq_wf_tpo :
   (forall (m n:nat) (t1 : term), 
       wf_term m n t1 ->
       forall (t2 : term) (bf : ren m m) (br : ren n n),
-        peq_term m n bf br t1 t2 ->
+        aeq_term m n bf br t1 t2 ->
         forall (WBF : wf_bij_ren bf) (WBR : wf_bij_ren br),
           wf_term m n t2)
   /\ (forall (m n:nat) (G : lctxt m) (D : lctxt n) (P1 : proc), 
         wf_proc m n G D P1 ->
       forall (P2 : proc) (bf : ren m m) (br : ren n n),
-          peq_proc m n bf br P1 P2 ->
+          aeq_proc m n bf br P1 P2 ->
         forall (WBF : wf_bij_ren bf) (WBR : wf_bij_ren br),
           wf_proc m n
               (ren_compose (bij_inv bf WBF) G)
@@ -1581,7 +1653,7 @@ Lemma peq_wf_tpo :
   /\ (forall (m n:nat) (G : lctxt m) (D : lctxt n) (o1 : oper),  
         wf_oper m n G D o1 ->
       forall (o2 : oper) (bf : ren m m) (br : ren n n),
-          peq_oper m n bf br o1 o2 ->
+          aeq_oper m n bf br o1 o2 ->
         forall (WBF : wf_bij_ren bf) (WBR : wf_bij_ren br),
           wf_oper m n
               (ren_compose (bij_inv bf WBF) G)
@@ -1591,11 +1663,11 @@ Proof.
   apply wf_tpo_ind; intros.
   (* All cases but Bag follow this structure: *)
   all: try solve [
-    (* Invert on the PEQ judgment *)
+    (* Invert on the AEQ judgment *)
     match goal with
-    | [ H: context[peq_term] |- _ ] => inversion H; existT_eq; subst
-    | [ H: context[peq_proc] |- _ ] => inversion H; existT_eq; subst
-    | [ H: context[peq_oper] |- _ ] => inversion H; existT_eq; subst
+    | [ H: context[aeq_term] |- _ ] => inversion H; existT_eq; subst
+    | [ H: context[aeq_proc] |- _ ] => inversion H; existT_eq; subst
+    | [ H: context[aeq_oper] |- _ ] => inversion H; existT_eq; subst
     end;
 
     (* For convenience *)
@@ -1611,12 +1683,9 @@ Proof.
     (* Does any context rewriting necessary for constructing WF *)
     try (unfold zero; repeat rewrite ren_compose_flat_ctxt);
     try (repeat rewrite ren_sum_compose);
-    try (repeat rewrite ren_one_compose with (HWB := WBRI); auto;
-      rewrite (bij_inv_bij_inv_eq _ WBR));
-    try (repeat rewrite ren_one_compose with (HWB := WBFI); auto;
-      rewrite (bij_inv_bij_inv_eq _ WBF));
+    try (repeat (rewrite ren_one_compose_inv by auto));
 
-    (* The PEQ expression (t' p' o') is WF under the renamed contexts, 
+    (* The AEQ expression (t' p' o') is WF under the renamed contexts, 
           with subexpressions WF by IH *)
     econstructor; eauto;
     try reflexivity;

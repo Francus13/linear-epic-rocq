@@ -1633,6 +1633,30 @@ Qed.
     apply ren_delta_compose; auto.
   Qed.
 
+  (* Composing with the inverse of a bijection moves [one n x] to [one n (r x)].
+     Unlike [bij_inv_bij_inv_eq], this only needs [x] to be in scope, so it holds
+     under the new wf_ren. *)
+  Lemma ren_one_compose_inv :
+    forall {n} (r : ren n n) (HWB : wf_bij_ren r) x,
+      x < n ->
+      ren_compose (bij_inv r HWB) (one n x) = one n (r x).
+  Proof.
+    intros.
+    destruct HWB as [HWF [r_inv [HWF' HEQ]]]; simpl.
+    unfold ren_compose, compose, one, delta.
+    apply functional_extensionality; intros y.
+    assert (r x < n) by (apply HWF; auto).
+    destruct (lt_dec x n), (lt_dec (r x) n); try lia.
+    destruct (lt_dec y n).
+    - destruct (HEQ y) as [HY _]; destruct (HY l1) as [HY1 HY2].
+      destruct (HEQ x) as [HX _]; destruct (HX l) as [HX1 HX2].
+      destruct (Nat.eq_dec x (r_inv y)), (Nat.eq_dec (r x) y); subst; auto.
+      + contradiction.
+      + rewrite HX1 in n0. contradiction.
+    - assert (r_inv y >= n) by (apply HWF'; lia).
+      destruct (Nat.eq_dec x (r_inv y)), (Nat.eq_dec (r x) y); auto; lia.
+  Qed.
+
   Lemma ren_SUM_compose :
     forall {n} (r : ren n n)
       (l : list (lctxt n)),

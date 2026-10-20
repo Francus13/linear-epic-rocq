@@ -1,9 +1,9 @@
 -Q theories LEpic
 
 theories/Contexts.v
-theories/Permutations.v
 theories/Syntax.v
 theories/EvalContexts.v
 theories/Semantics.v
+theories/Preservation.v
 theories/Confluence.v
 theories/Observations.v

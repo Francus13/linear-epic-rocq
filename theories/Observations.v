@@ -1,4 +1,4 @@
-From Stdlib Require Import
+(* From Stdlib Require Import
   Arith   
   Logic.FunctionalExtensionality         
   Classes.RelationClasses
@@ -52,4 +52,4 @@ Inductive machine_strict_step : machine -> machine -> Prop :=
     (t1 t2 : term),
     step m n t1 t2 ->
     machine_strict_step (o1 t1) (o2 t2)
-.
+. *)
