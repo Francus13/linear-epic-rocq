@@ -591,6 +591,27 @@ Qed.
 
 
 
+(*
+  f <- \r.
+        g r
+  g <- \r.
+        f r
+  *)
+Definition breaks_confluence :=
+  let f := 0 in
+  let g := 1 in
+  let rf := 0 in
+  let rg := 1 in
+  let r := 0 in
+  bag 2 2 (par (par (par
+            (def rf (bng f))
+            (def rg (bng g)))
+            (def rf (lam (bag 0 0
+                          (app g r)))))
+            (def rg (lam (bag 0 0
+                          (app f r))))
+               ).
+
 
 
 
