@@ -621,6 +621,39 @@ Definition breaks_confluence :=
     f <- \r. r <- ()
              ∅  
     f r
+
+
+
+    -1->
+    
+    f <- \r. r <- ()
+    f r
+
+    -2->
+
+    f <- \r. r <- ()
+    r <- ()
+
+
+
+    -1'->
+    
+    f <- \r. r <- ()
+             ∅ 
+    r <- ()
+    ∅
+
+    -2'->
+    
+    f <- \r. r <- ()
+             ∅ 
+    r <- ()
+
+    -3'->
+    
+    f <- \r. r <- () 
+    r <- ()
+
   *)
 Lemma no_strong_confluence :
   ~ forall m n (t t1 t2: term)
@@ -702,7 +735,7 @@ Proof.
           with (Et <=[ P ]) by (subst; auto).
       subst; constructor.
 
-  - admit.
+  -  destruct H. admit.
 Admitted.
 
 
