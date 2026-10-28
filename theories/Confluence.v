@@ -28,6 +28,29 @@ Local Open Scope bool_scope.
 
 
 (* PLAN
+Morally I'm thinking split the stepping rules into only stepping at 
+top-level and only stepping under binders. 
+From the observer's perspective (where they only access free variables), 
+the top-level steps are complete with respect to the general stepping rules. 
+Contrastly, the under-binder steps add no expressibility 
+(from the observer's perspective) but allows important optimization, 
+so it's important to show that the under-binder steps 
+1) don't introduce new behavior, and 
+2) don't cause the program to get stuck.
+
+This is all true except that some lambdas can be connected to free variables, 
+making them observable (i.e. they escape). 
+To make the top-level steps complete from the observer's perspective, 
+these lambdas need to have their bodies stepped. 
+And so the top-level steps any lambda that is statically known to escape 
+(i.e. there is a cut-free chain of variables between the lambda 
+and a free variable).
+
+And then to keep the separation clean between top-level rules doing all 
+observable change and under-binder rules doing only non-observable change, 
+I think the under-binder steps shouldn't step these 
+statically-known-escaping lambdas.
+
   1: Prove strong confluence for a modified step rule "top-level step"
       that only steps at the top level or
       under binders that have a known route to escape scope
