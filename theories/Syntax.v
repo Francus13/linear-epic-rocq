@@ -226,6 +226,10 @@ with seq_proc : proc -> proc -> Prop :=
   forall (P : proc),
     seq_proc P P
 
+| seq_proc_nul :
+  forall (P : proc),
+    seq_proc (par P nul) P
+
 | seq_proc_symm :
   forall P1 P2,
     seq_proc P1 P2 ->
@@ -365,7 +369,7 @@ Proof. unfold Symmetric. apply tpo_seq_symmetric. Qed.
      to a more defined piece of syntax.
  *)
 
-Lemma seq_proc_inv_def' : forall P1 P2,
+(* Lemma seq_proc_inv_def' : forall P1 P2,
     P1 ≈p P2 ->
     (forall r o, P1 = def r o -> exists o', P2 = def r o' /\ o ≈o o') /\
       (forall r o, P2 = def r o -> exists o', P1 = def r o' /\ o ≈o o').
@@ -376,6 +380,8 @@ Proof.
   all: try solve [split; try clear H; intros; discriminate H].
   (* Reflexivity *)
   - split; intros; exists o; auto.
+  (* Unit *)
+  - split; intros; try discriminate H.
   (* Symmetry *)
   - split; intros; apply IHseq_proc in H0; auto.
   (* Transitivity *)
@@ -414,7 +420,7 @@ Proof.
   apply seq_proc_inv_def' in H.
   destruct H as [H _].
   apply H. reflexivity.
-Qed.  
+Qed.
 
 Lemma seq_proc_inv_app' : forall P1 P2,
     P1 ≈p P2 ->
@@ -457,7 +463,7 @@ Proof.
   apply seq_proc_inv_app' in H.
   apply H.
   reflexivity.
-Qed.
+Qed.   *)
 
 
 
@@ -612,6 +618,40 @@ Ltac existT_eq :=
 
 
 
+(* Prove that well-formedness respects context equivalence. *)
+Lemma tpo_equiv_wf :
+(* The first element is trivial, but allows using wf_tpo_ind *)
+  (forall m n t,
+    wf_term m n t ->
+      True)
+  /\
+  (forall m n G1 D1 P,
+    wf_proc m n G1 D1 P ->
+      forall G2 D2,
+    G1 ≡[m] G2 ->
+    D1 ≡[n] D2 ->
+      wf_proc m n G2 D2 P)
+  /\
+  (forall m n G1 D1 o,
+    wf_oper m n G1 D1 o ->
+      forall G2 D2,
+    G1 ≡[m] G2 ->
+    D1 ≡[n] D2 ->
+      wf_oper m n G2 D2 o).
+Proof.
+  apply wf_tpo_ind; intros.
+  (* All cases are by transitivity:
+      from G1 ≡[m] G2 in the premise and G1 ≡[m] ?G from inverting wf, 
+      we get G2 ≡[m] ?G to reconstruct wf *)
+  all:
+    econstructor; eauto;
+    try (eapply transitivity; eauto; symmetry; eauto).
+  (* Rocq needs help for Def *)
+  - apply H; auto. reflexivity.
+Qed.
+
+
+
 (* Prove that well-formedness respects structural equivalence. *)
 
 (* It seems that the trick for this proof is to close 
@@ -660,6 +700,14 @@ Proof.
     inversion H; existT_eq; subst;
     econstructor; eauto
   ].
+  (* Par Unit *)
+  - split; intros.
+    + inversion H; inversion WFP2; existT_eq; subst; clear H WFP2.
+    rewrite HG0, HD0 in *; clear HG0 HD0.
+    repeat rewrite sum_zero_r in *.
+    eapply tpo_equiv_wf; eauto; now symmetry.
+    + repeat (econstructor; eauto).
+      all: now rewrite sum_zero_r.
   (* Process Eq Transitive *)
   - destruct H as [HL1 HR1].
     destruct H0 as [HL2 HR2].
@@ -723,38 +771,6 @@ Lemma wf_seq_oper : forall o1 o2 m n G D,
 Proof. intros o1 o2 m n G D H; generalize o1 o2 H m n G D. apply tpo_wf_seq. Qed.
 
 
-
-(* Prove that well-formedness respects context equivalence. *)
-Lemma tpo_equiv_wf :
-(* The first element is trivial, but allows using wf_tpo_ind *)
-  (forall m n t,
-    wf_term m n t ->
-      True)
-  /\
-  (forall m n G1 D1 P,
-    wf_proc m n G1 D1 P ->
-      forall G2 D2,
-    G1 ≡[m] G2 ->
-    D1 ≡[n] D2 ->
-      wf_proc m n G2 D2 P)
-  /\
-  (forall m n G1 D1 o,
-    wf_oper m n G1 D1 o ->
-      forall G2 D2,
-    G1 ≡[m] G2 ->
-    D1 ≡[n] D2 ->
-      wf_oper m n G2 D2 o).
-Proof.
-  apply wf_tpo_ind; intros.
-  (* All cases are by transitivity:
-      from G1 ≡[m] G2 in the premise and G1 ≡[m] ?G from inverting wf, 
-      we get G2 ≡[m] ?G to reconstruct wf *)
-  all:
-    econstructor; eauto;
-    try (eapply transitivity; eauto; symmetry; eauto).
-  (* Rocq needs help for Def *)
-  - apply H; auto. reflexivity.
-Qed.  
 
 #[global] Instance Proper_wf_proc {m n : nat} : Proper ((@ctxt_eq nat m) ==> (@ctxt_eq nat n) ==> seq_proc ==> iff) (wf_proc m n).
 Proof.

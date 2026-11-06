@@ -696,11 +696,11 @@ Definition can_remove_function f Et :=
 (* Small Step *)
               
 Inductive prim_step : term -> term -> Prop :=
-| step_par_nul :    (*  Et <=[ P | nul ]  -->  Et <=[ P ]  *)
+(* | step_par_nul :    (*  Et <=[ P | nul ]  -->  Et <=[ P ]  *)
   forall Et P,
     prim_step
       (Et <=[ par P nul ])
-      (Et <=[ P ])
+      (Et <=[ P ]) *)
 
 | step_emp_cut :    (*  Et <=[ r <- () | r <- () ]  -->  Et <=[ nul ]  *)
   forall Et r,
@@ -713,6 +713,24 @@ Inductive prim_step : term -> term -> Prop :=
     prim_step
       (Et <=[ par (def r (tup r1 r2)) (def r (tup r1' r2')) ])
       (Et <=[ par (req r1 r1') (req r2 r2') ])
+
+| step_req_def :    (*  Et <=[ r1 = r2 | r1 <- o ]  -->  Et <=[ r2 <- o ]  *)
+  forall Et r1 r2 o,
+    prim_step
+      (Et <=[ par (req r1 r2) (def r1 o) ])
+      (Et <=[ def r2 o ])
+
+| step_req_app :    (*  Et <=[ r1 = r2 | f r1 ]  -->  Et <=[ f r2 ]  *)
+  forall Et r1 r2 f,
+    prim_step
+      (Et <=[ par (req r1 r2) (app f r1) ])
+      (Et <=[ app f r2 ])
+
+| step_req_req :    (*  Et <=[ r1 = r2 | r1 = r ]  -->  Et <=[ r2 = r ]  *)
+  forall Et r1 r2 r,
+    prim_step
+      (Et <=[ par (req r1 r2) (req r1 r) ])
+      (Et <=[ req r2 r ])
       
 | step_app_same_scope :    (*  Et <=[ rf <- lam r'. t | rf <- ?f | f r ]  *)
   forall Et t f rf r,    (*  -->  Et <=[ '' | '' | fresh_body(t){r=r'} ]  *)
@@ -741,14 +759,6 @@ Inductive prim_step : term -> term -> Prop :=
     prim_step
       (Et_fun <=[ def rl (lam (Et         <=[ app f' r ])) ])
       (Et_fun <=[ def rl (lam (Et_shifted <=[ new_body ])) ])
-
-| step_req :    (*  Et <=[ r1 = r2 ]  -->  (rename_at_hole_scope Et r1 r2) <=[ nul ]  *)
-  forall Et r1 r2,
-    let n := bound_rvars_at_hole_scope Et in
-    r1 < n \/ r2 < n ->
-    prim_step
-      (Et <=[ req r1 r2 ])
-      ((rename_at_hole_scope n r1 r2 Et) <=[ nul ])
 
 (* No motivating reason to have right now *)
 (* | step_remove_function :

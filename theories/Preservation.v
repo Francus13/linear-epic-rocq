@@ -20,7 +20,7 @@ Local Open Scope bool_scope.
 
 (* Preservation of prim_step and step *)
 
-Lemma wf_prim_step_nul :
+(* Lemma wf_prim_step_nul :
   forall m n Et P,
     wf_term m n (Et <=[ par P nul ]) ->
     wf_term m n (Et <=[ P ]).
@@ -28,7 +28,7 @@ Proof.
   intros. destr_inv_fill_wf H. eapply fill_wf_pres_term; eauto.
   inversion H1; inversion WFP2; existT_eq; subst; rewrite_ctxt_equivs.
   repeat rewrite sum_zero_r; auto.
-Qed.
+Qed. *)
 
 
 
@@ -38,15 +38,14 @@ Lemma wf_prim_step_emp :
     wf_term m n (Et <=[ nul ]).
 Proof.
   intros. destr_inv_fill_wf H.
-  inversion H1; inversion WFP1; inversion WFP2; inversion WFO; 
-    inversion WFO0; existT_eq; subst; rewrite_ctxt_equivs; 
-    clear H1 WFP1 WFP2 WFO WFO0.
+  inversion H1; inversion WFP1; inversion WFP2; inversion WFO; inversion WFO0; 
+      existT_eq; subst; clear H1 WFP1 WFP2 WFO WFO0; rewrite_ctxt_equivs.
+
   repeat rewrite sum_zero_r in H2.
   unfold one in H2; rewrite delta_sum in H2; simpl in H2.
-  assert ((zero n_hol) r = 0) as Z by auto.
-  eapply rem_hole_rvar_EC_wf in H2; try exact Z; auto.
-  - eapply fill_wf_pres_term; eauto. constructor; reflexivity.
-  - rewrite sum_zero_l; reflexivity.
+
+  eapply rem_hole_rvar_EC_wf in H2; try rewrite sum_zero_l; eauto; try reflexivity.
+  eapply fill_wf_pres_term; eauto. constructor; reflexivity.
 Qed.
 
 
@@ -60,40 +59,91 @@ Proof.
   inversion H1; inversion WFP1; inversion WFP2; inversion WFO; 
     inversion WFO0; existT_eq; subst; rewrite_ctxt_equivs; 
     clear H1 WFP1 WFP2 WFO WFO0.
-  rewrite sum_zero_r in H2.
+  rewrite sum_zero_l in H2.
+
   unfold one at 1 4 in H2.
   assert (forall c1 c2, ((n_hol [r ↦ 1] ⨥ c1) ⨥ (n_hol [r ↦ 1] ⨥ c2))
-                ≡[n_hol]  c1 ⨥ c2 ⨥ n_hol [r ↦ 2]) as Z.
-    { unfold delta, sum, ctxt_eq; intros. lia_goal. }
+                ≡[n_hol]  c1 ⨥ c2 ⨥ n_hol [r ↦ 2]) as Z by solve_ctxt_eq.
   rewrite Z in H2; clear Z.
   assert (H3 := H2).
+
   eapply rem_hole_rvar_EC_wf in H2; try reflexivity; auto.
   - eapply fill_wf_pres_term; eauto. repeat econstructor; auto.
-    unfold sum, one, ctxt_eq, delta; lia.
+    solve_ctxt_eq.
   - apply max_rvar_hole_EC_wf_term with (r := r) in H3; auto.
-    unfold one, delta, sum in *; lia_destruct; lia_goal.
+    solve_ctxt_eq.
 Qed.
 
 
 
-Lemma wf_prim_step_req :
-  forall m n Et r1 r2,
-    let n_bound := bound_rvars_at_hole_scope Et in
-    r1 < n_bound \/ r2 < n_bound ->
-    wf_term m n (Et <=[ req r1 r2 ]) ->
-    wf_term m n ((rename_at_hole_scope n_bound r1 r2 Et) <=[ nul ]).
+Lemma wf_prim_step_req_def :
+  forall m n Et r1 r2 o,
+    wf_term m n (Et <=[ par (req r1 r2) (def r1 o) ]) ->
+    wf_term m n (Et <=[ def r2 o ]).
 Proof.
-  intros. destr_inv_fill_wf H0.
-  inversion H1; existT_eq; subst; rewrite_ctxt_equivs; clear H1.
-  eapply (fill_wf_pres_term m n m_hol n_hol); eauto. 
-  2: econstructor; reflexivity.
+  intros. destr_inv_fill_wf H.
+  inversion H1; inversion WFP1; inversion WFP2;
+      existT_eq; subst; clear H1 WFP1 WFP2; rewrite_ctxt_equivs.
+  rewrite sum_zero_l in H2.
 
-  unfold rename_at_hole_scope.
-  eapply mutate_hole_scope_wf; eauto.
-  apply wf_hs_fun_hole_scope.
-  erewrite rename_rvar_EC_proc_indep 
-      with (R2 := rename_var n_hol n_bound r1 r2); eauto.
-  apply rename_var_wf_hs_fun; auto.
+  unfold one at 1 3 in H2.
+  assert (forall c1 c2, ((n_hol [r1 ↦ 1] ⨥ c1) ⨥ (n_hol [r1 ↦ 1] ⨥ c2))
+                ≡[n_hol]  c1 ⨥ c2 ⨥ n_hol [r1 ↦ 2]) as Z by solve_ctxt_eq.
+  rewrite Z in H2; clear Z.
+  assert (H3 := H2).
+
+  eapply rem_hole_rvar_EC_wf in H2; try reflexivity; auto.
+  - eapply fill_wf_pres_term; eauto. econstructor; now eauto.
+  - apply max_rvar_hole_EC_wf_term with (r := r1) in H3; auto.
+    solve_ctxt_eq.
+Qed.
+
+
+
+Lemma wf_prim_step_req_app :
+  forall m n Et r1 r2 f,
+    wf_term m n (Et <=[ par (req r1 r2) (app f r1) ]) ->
+    wf_term m n (Et <=[ app f r2 ]).
+Proof.
+  intros. destr_inv_fill_wf H.
+  inversion H1; inversion WFP1; inversion WFP2;
+      existT_eq; subst; clear H1 WFP1 WFP2; rewrite_ctxt_equivs.
+  rewrite sum_zero_l in H2.
+
+  unfold one at 1 3 in H2.
+  assert (forall c1, ((n_hol [r1 ↦ 1] ⨥ c1) ⨥ n_hol [r1 ↦ 1])
+                ≡[n_hol]  c1 ⨥ n_hol [r1 ↦ 2]) as Z by solve_ctxt_eq.
+  rewrite Z in H2; clear Z.
+  assert (H3 := H2).
+  
+  eapply rem_hole_rvar_EC_wf in H2; try reflexivity; auto.
+  - eapply fill_wf_pres_term; eauto. econstructor; now eauto.
+  - apply max_rvar_hole_EC_wf_term with (r := r1) in H3; auto.
+    solve_ctxt_eq.
+Qed.
+
+
+
+Lemma wf_prim_step_req_req :
+  forall m n Et r1 r2 r,
+    wf_term m n (Et <=[ par (req r1 r2) (req r1 r) ]) ->
+    wf_term m n (Et <=[ req r2 r ]).
+Proof.
+  intros. destr_inv_fill_wf H.
+  inversion H1; inversion WFP1; inversion WFP2;
+      existT_eq; subst; clear H1 WFP1 WFP2; rewrite_ctxt_equivs.
+  rewrite sum_zero_l in H2.
+
+  unfold one at 1 3 in H2.
+  assert (forall c1 c2, ((n_hol [r1 ↦ 1] ⨥ c1) ⨥ (n_hol [r1 ↦ 1] ⨥ c2))
+                ≡[n_hol]  c1 ⨥ c2 ⨥ n_hol [r1 ↦ 2]) as Z by solve_ctxt_eq.
+  rewrite Z in H2; clear Z.
+  assert (H3 := H2).
+  
+  eapply rem_hole_rvar_EC_wf in H2; try reflexivity; auto.
+  - eapply fill_wf_pres_term; eauto. econstructor; now eauto.
+  - apply max_rvar_hole_EC_wf_term with (r := r1) in H3; auto.
+    solve_ctxt_eq.
 Qed.
 
 
@@ -116,11 +166,11 @@ Proof.
   rewrite sum_zero_l in H2.
   destruct t; simpl in *.
   inversion WFP2; inversion WFP1; inversion WFP0; 
-      inversion WFO; inversion WFO0; inversion WFT; 
-      existT_eq; subst; rewrite_ctxt_equivs; 
-      rewrite sum_zero_l, sum_zero_r in *;
+      inversion WFO; inversion WFO0; inversion WFT;
+      clear WFP1 WFP0 WFO WFO0 WFT; existT_eq; subst;
+      rewrite_ctxt_equivs; rewrite sum_zero_l, sum_zero_r in *;
       unfold one in *; rewrite delta_sum in *; simpl in *;
-      clear WFP1 WFP0 WFO WFO0 WFT G0 D0 G1 D1 G2 D2 G3 D3.
+      clear G0 D0 G1 D1 G2 D2 G3 D3.
 
   unfold bound_fvars_at_hole_scope, bound_rvars_at_hole_scope,
       apply_at_hole_scope in new_body.
@@ -169,6 +219,8 @@ Proof.
 
   - unfold Et_shifted; clear Et_shifted new_body.
     unfold shift_hs_by_term_vars; simpl.
+
+    (* Could simplify here? *)
 
     do 2 (try eapply mutate_hole_scope_wf); eauto; unfold Et_fun.
     + eapply EC_fill_wf_pres_term; eauto.
@@ -221,6 +273,8 @@ Proof.
       remember (weaken_ren ((n0 + 1) + n_free) n1) as Rr. 
       erewrite rename_fvar_ind_proc with (R2 := Rf); auto.
       erewrite rename_rvar_ind_proc with (R2 := Rr); auto.
+
+      (* Can simplify here? *)
 
       assert (@ctxt_app _ (m1 + m0) m_free (zero m1 ⊗ G8) (zero m_free) ≡[m1 + m0 + m_free]
           lctxt_rename Rf (@ctxt_app _ m0 (m1 + m_free) G8 (zero (m1 + m_free)))). {
@@ -277,11 +331,11 @@ Proof.
   inversion H3; existT_eq; subst; clear H3; rewrite_ctxt_equivs. 
   destruct t; simpl in *.
   inversion WFP2; inversion WFP1; inversion WFP0; 
-      inversion WFO; inversion WFO0; inversion WFT; 
-      existT_eq; subst; rewrite_ctxt_equivs; 
-      rewrite sum_zero_l, sum_zero_r in *;
+      inversion WFO; inversion WFO0; inversion WFT;
+      clear WFP1 WFP0 WFO WFO0 WFT; existT_eq; subst;
+      rewrite_ctxt_equivs; rewrite sum_zero_l, sum_zero_r in *;
       unfold one in *; rewrite delta_sum in *; simpl in *;
-      clear WFP1 WFP0 WFO WFO0 WFT G0 D0 G1 D1 G2 D2 G3 D3.
+      clear G0 D0 G1 D1 G2 D2 G3 D3.
 
   unfold bound_fvars_before_hole_scope,
       bound_fvars_at_hole_scope, bound_rvars_at_hole_scope,
@@ -441,12 +495,13 @@ Lemma wf_prim_step :
     wf_term m n t'.
 Proof.
   intros. inversion H0; subst; clear H0.
-  - eapply wf_prim_step_nul; eauto.
   - eapply wf_prim_step_emp; eauto.
   - eapply wf_prim_step_tup; eauto.
+  - eapply wf_prim_step_req_def; eauto.
+  - eapply wf_prim_step_req_app; eauto.
+  - eapply wf_prim_step_req_req; eauto.
   - eapply wf_prim_step_app_same_scope; eauto.
   - eapply wf_prim_step_app_diff_scope; eauto.
-  - eapply wf_prim_step_req; eauto.
 Qed.
 
 Lemma wf_step :
