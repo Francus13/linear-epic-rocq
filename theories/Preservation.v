@@ -20,18 +20,6 @@ Local Open Scope bool_scope.
 
 (* Preservation of prim_step and step *)
 
-(* Lemma wf_prim_step_nul :
-  forall m n Et P,
-    wf_term m n (Et <=[ par P nul ]) ->
-    wf_term m n (Et <=[ P ]).
-Proof.
-  intros. destr_inv_fill_wf H. eapply fill_wf_pres_term; eauto.
-  inversion H1; inversion WFP2; existT_eq; subst; rewrite_ctxt_equivs.
-  repeat rewrite sum_zero_r; auto.
-Qed. *)
-
-
-
 Lemma wf_prim_step_emp :
   forall m n Et r,
     wf_term m n (Et <=[ par (def r emp) (def r emp) ]) ->
