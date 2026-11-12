@@ -35,25 +35,14 @@ end.
 
 (* Extending Renamings and Contexts ---------------------------------------------------------- *)
 
-(* FRAN: This is inconsistent in canonicity with ren_id,
-    since it weakens variables out of scope.
-    Update: It actually needs to weaken variables out of scope
-    so that we don't need to track the free variables in the semantics.
-    Also why lt_dc instead of < (lt)? *)
-(* A renaming that changes the last m variables to (m + m'') *)
-Definition weaken_tail_ren (m m' m'' : nat) : ren (m' + m) (m' + m'' + m) :=
-  fun f =>
-    if lt_dec f m' then f 
-    else f + m''.
-
+(* A renaming that adds n to every variable *)
 Definition weaken_ren (m n : nat) : ren m (n + m) :=
-  weaken_tail_ren m 0 n.
-
+  fun x => x + n.
 
 Lemma weaken_ren_wf_ren :
   forall m n,
     wf_ren (weaken_ren m n).
-Proof. unfold wf_ren, weaken_ren, weaken_tail_ren; intros; split; intros; lia_goal. Qed.
+Proof. unfold wf_ren, weaken_ren; intros; split; intros; lia. Qed.
 
 Lemma weaken_ren_lctxt_rename :
   forall m n (c : lctxt m),
@@ -66,7 +55,7 @@ Proof.
                  /\ (forall x, (n + i) <= x -> lctxt_rename_helper i R c x = 0)).
   { apply H; lia. }
   assert (forall i, weaken_ren m n i = n + i) by
-      (intros; unfold weaken_ren, weaken_tail_ren; destruct (lt_dec i 0); lia).
+      (intros; unfold weaken_ren; lia).
   unfold ctxt_eq, R, c_new in *; induction i; simpl; intros; split; intros.
   all: try solve [solve_ctxt_eq; auto].
   all: destruct IHi.
@@ -83,7 +72,7 @@ Qed.
 (* A renaming that commutes two adjacent variable spaces 
     (m1 and m2 in length) starting after m0 variables *)
 Definition ren_commute_str m0 m1 m2 m3 : 
-        ren (m0 + (m1 + m2) + m3) (m0 + (m2 + m1) + m3) :=
+        ren (m0 + m1 + m2 + m3) (m0 + m1 + m2 + m3) :=
   fun x =>
     if (lt_dec x m0) then x 
     else if (lt_dec x (m0 + m1)) then (x + m2)
@@ -95,6 +84,19 @@ Lemma ren_commute_str_wf_ren :
   forall m0 m1 m2 m3,
     wf_ren (ren_commute_str m0 m1 m2 m3).
 Proof. unfold wf_ren, ren_commute_str; intros; split; intros; lia_goal. Qed.
+
+Lemma ren_commute_str_wf_bij_ren :
+  forall m0 m1 m2 m3,
+    wf_bij_ren (ren_commute_str m0 m1 m2 m3).
+Proof. 
+  unfold wf_bij_ren; intros; split; intros; try apply ren_commute_str_wf_ren.
+  unfold bij_ren.
+  exists (ren_commute_str m0 m2 m1 m3); split.
+  - replace (m0 + m1 + m2 + m3) with (m0 + m2 + m1 + m3) by lia.
+    apply ren_commute_str_wf_ren.
+  - unfold ren_inverses; intros; split; intros; split.
+    all: unfold ren_commute_str; lia_goal.
+Qed.
 
 Lemma ren_commute_str_lctxt_rename :
   forall m0 m1 m2 m3 (c0 : lctxt m0) (c1 : lctxt m1) (c2 : lctxt m2) (c3 : lctxt m3),
@@ -214,7 +216,7 @@ Proof.
     now repeat rewrite app_zero
   ].
   all: try solve [
-    unfold ren_shift, ren_id, weaken_ren, weaken_tail_ren;
+    unfold ren_shift, ren_id, weaken_ren;
     solve_ctxt_eq
   ].
 
@@ -229,7 +231,7 @@ Proof.
     now rewrite <- ctxt_app_assoc, app_zero.
 
   (* Bng base case for renaming *)
-  - clear HD; unfold ren_shift, weaken_ren, ren_id, weaken_tail_ren in *.
+  - clear HD; unfold ren_shift, weaken_ren, ren_id in *.
     solve_ctxt_eq; subst.
     1, 2, 3: specialize HG with x; solve_ctxt_eq.
     1, 3: replace (x - (m + m_new)) with (x - m_new - m) by lia;
@@ -263,7 +265,7 @@ Proof.
   ].
   all:
     try rename HD into H;
-    unfold ren_shift, ren_id, weaken_ren, weaken_tail_ren in *; 
+    unfold ren_shift, ren_id, weaken_ren in *; 
     solve_ctxt_eq; subst;
     try rename x into x3;
     try solve [try specialize H with x3;
