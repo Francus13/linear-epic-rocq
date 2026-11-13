@@ -9,7 +9,7 @@ From Stdlib Require Import
   List
   Lia.
 
-From LEpic Require Import
+From LinOpal Require Import
   Contexts
   Syntax
   EvalContexts

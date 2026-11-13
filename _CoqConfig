@@ -1,4 +1,4 @@
--Q theories LEpic
+-Q theories LinOpal
 
 theories/Contexts.v
 theories/Syntax.v

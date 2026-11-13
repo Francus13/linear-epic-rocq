@@ -9,7 +9,7 @@ From Stdlib Require Import
   List
   Lia.
 
-From LEpic Require Import
+From LinOpal Require Import
   Contexts
   Syntax
   EvalContexts
@@ -121,12 +121,17 @@ statically-known-escaping lambdas.
             t -->* t1
             and (obs t1) = (obs t2)
             and (bnd t1) ~>* (bnd t2)
-    4. If t -~>* t1
-          and t -~>* t2
+    4. If t -~> t1
+          and t -~> t2
         then t.e. t1' t2' s.t.
           t1 -->* t1'
           and t2 -->* t2'
           and (obs t1') = (obs t2')
+
+          
+      t -~> t1 and t -~> t2
+      then t1 -~>* t1' and t2 -~>* t2'
+      and t1 =o= t2.
 
     5? Maybe want that stepping is observation-monotonic.
 
@@ -174,7 +179,276 @@ statically-known-escaping lambdas.
     2. Property 2 (and the others) guarantees that observations are
         recoverable when doing a non-esc binder step
     Thus, observations are always recoverable based on scheduling.
+
+
+PROBLEM:
+  As mentioned, lambdas can escape.
+  We need to have these lambdas step under binders.
+  The whole argument is that nothing non-confluent 
+  But if the lambda body is 
 *)
+
+
+
+
+(*
+
+
+
+
+
+
+
+t equiv t' iff
+  t and t' wf under m n and
+  forall context C s.t. ...
+    C maps m and n to r
+    C has a hole fillable with a term where wf m n t
+    wf 1 1 (C <=[t])
+  then terminates (C <=[t]) <-> terminates (C <=[t'])
+
+  where t =p= t' iff
+    (t -->* t1 where t1[r] = o
+  iff t -->* t2 where t1[r] = o')
+
+
+
+ok ops:
+ ()
+ (r1, r2) ok iff r1 ok and r2 ok
+ ?f
+ \r. t
+
+
+
+
+
+
+
+
+t -> t1 and t -> t2
+then t1 ->* t1' and t2 ->* t2'
+and t1 =o= t2.
+
+
+
+
+
+
+
+
+obs := top level or under esc binder
+opt := other
+
+
+r <- \r. 
+      f <- \r. g r
+      g <- \r. f r
+      r' = r
+      f r'
+--top-->
+r1 <- \r2. 
+      f <- \ra. g ra
+      g <- \rb. f rb
+      f r2
+
+
+\r2. 
+      f <- \ra. f ra
+      g <- \rb. f rb
+      f r2
+  
+\r2. 
+      f <- \ra. g ra
+      g <- \rb. g rb
+      f r2
+
+
+
+
+r1 <- \r2. 
+      f <- \r. g r
+      g <- \r. f r
+      f r2
+
+t =
+r1 <- \r2. 
+      f <- \r. f r
+      g <- \r. f r
+      f r2
+
+t' =
+r1 <- \r2. 
+      f <- \r. g r
+      g <- \r. g r
+      f r2
+
+
+
+
+
+
+
+
+
+
+
+
+
+wf 0 1 t and wf 0 1 t'
+C = []
+
+w.t.p t =p= t'
+
+
+
+
+wf m n t
+
+f |-> r
+r |-> o
+
+wf _ n t
+
+
+
+
+
+
+
+
+t -> t1      t -> t2
+exists t12, t21, t1 ->* t12, t2 ->* t21
+[[t12]] >= [[t2]] /\ [[t21]] >= [[t1]]
+
+
+
+
+*)
+
+
+
+
+
+
+
+
+
+
+
+Inductive rvar_escapes : nat -> nat -> proc -> rvar -> Prop :=
+| esc_free :
+  forall m n P r,
+    r >= n ->
+    rvar_escapes m n P r
+
+| esc_app :
+  forall m n P f r,
+    f >= m ->
+    rvar_escapes m n (par (app f r) P) r
+
+| esc_tup_l :
+  forall m n P r r1 r2,
+    rvar_escapes m n P r ->
+    rvar_escapes m n (par (def r (tup r1 r2)) P) r1
+
+| esc_tup_r :
+  forall m n P r r1 r2,
+    rvar_escapes m n P r ->
+    rvar_escapes m n (par (def r (tup r1 r2)) P) r2
+
+| esc_seq :
+  forall m n P1 P2 r,
+    rvar_escapes m n P1 r ->
+    P1 ≈p P2 ->
+    rvar_escapes m n P2 r
+.
+
+
+
+Inductive obs_prim_step : term -> term -> Prop :=
+| obs_step_par_nul :    (*  Et <=[ P | nul ]  -->  Et <=[ P ]  *)
+  forall Et P,
+    is_hole_scope_at_top Et = true ->
+    obs_prim_step
+      (Et <=[ par P nul ])
+      (Et <=[ P ])
+
+| obs_step_emp_cut :    (*  Et <=[ r <- () | r <- () ]  -->  Et <=[ nul ]  *)
+  forall Et r,
+    is_hole_scope_at_top Et = true ->
+    obs_prim_step
+      (Et <=[ par (deobs_f r emp) (def r emp) ])
+      (Et <=[ nul ])
+
+| obs_step_tup_cut :    (*  Et <=[ r <- (r1, r2) | r <- (r1', r2') ]  *)
+  forall Et r r1 r2 r1' r2',    (*  -->  ET{r1=r1',r2=r2'} <=[ nul ]  *)
+    is_hole_scope_at_top Et = true ->
+    obs_prim_step
+      (Et <=[ par (def r (tup r1 r2)) (def r (tup r1' r2')) ])
+      (Et <=[ par (req r1 r1') (req r2 r2') ])
+      
+| step_app_same_scope :    (*  Et <=[ rf <- lam r'. t | rf <- ?f | f r ]  *)
+  forall Et t f rf r,    (*  -->  Et <=[ '' | '' | fresh_body(t){r=r'} ]  *)
+      (* Get the freshened and applied body *)
+    let new_body := ready_body_same_scope Et t r in
+      (* Shift the vars in the application's scope *)
+    let Et_fun := Et <=<[ (Epar Ehol
+                          (par (def rf (lam t))
+                               (def rf (bng f)))) ] in
+    let Et_shifted := shift_hs_by_term_vars t Et_fun in
+    is_hole_scope_at_top Et = true ->
+    obs_prim_step
+      (Et_fun     <=[ app f r ])
+      (Et_shifted <=[ new_body ])
+      
+| step_app_diff_scope :    (*  Et' <=[ rf <- lam r'. t | rf <- ?f | Et <=[ f r ] ]  *)
+  forall Et Et' t f rf rl r,    (*  -->  Et' <=[ '' | '' | Et <=[ fresh_body(t){r=r'} ] ]  *)
+      (* Ensure the fvars in the definition and application scopes agree *)
+    let f' := f + (bound_fvars_to_hole Et) in
+      (* Get the freshened and applied body *)
+    let new_body := ready_body_diff_scope Et t r in
+      (* Shift the vars in the application's scope *)
+    let Et_shifted := shift_hs_by_term_vars t Et in
+    let Et_fun := Et' <=<[ (Epar Ehol
+                           (par (def rf (lam t))
+                                (def rf (bng f)))) ] in
+    is_hole_scope_at_top Et = true ->
+    obs_prim_step
+      (Et_fun <=[ def rl (lam (Et         <=[ app f' r ])) ])
+      (Et_fun <=[ def rl (lam (Et_shifted <=[ new_body ])) ])
+
+| step_req :    (*  Et <=[ r1 = r2 ]  -->  (rename_at_hole_scope Et r1 r2) <=[ nul ]  *)
+  forall Et r1 r2,
+    let n := bound_rvars_at_hole_scope Et in
+    r1 < n \/ r2 < n ->
+    is_hole_scope_at_top Et = true ->
+    obs_prim_step
+      (Et <=[ req r1 r2 ])
+      ((rename_at_hole_scope n r1 r2 Et) <=[ nul ])
+
+(* No motivating reason to have right now *)
+(* | step_remove_function :
+  forall Et t f rf,
+    can_remove_function f Et = true ->
+    prim_step
+    (Et <=[ (par (def rf (lam t))
+                (def rf (bng f))) ])
+    (Et <=[ nul ]) *)
+.
+
+
+Inductive obs_step : term -> term -> Prop :=
+| step_rule : forall t1 t1' t2,
+    t1 ≈t t1' ->
+    prim_step t1' t2 ->
+    step t1 t2
+.
+
+
+
+
+
 
 
 

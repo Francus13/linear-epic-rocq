@@ -3,7 +3,7 @@
    (including lemmas that were already commented out there),
    grouped by their origin file and kept in their original order.
    This file is not listed in _CoqConfig, so `make` does not build it.
-   To check it: rocq compile -Q theories LEpic theories/UnusedLemmas.v *)
+   To check it: rocq compile -Q theories LinOpal theories/UnusedLemmas.v *)
 
 From Stdlib Require Import
   Arith   
@@ -17,7 +17,7 @@ From Stdlib Require Import
   Lia
   Relations.
 
-From LEpic Require Import Contexts Syntax EvalContexts Semantics.
+From LinOpal Require Import Contexts Syntax EvalContexts Semantics.
 Import Renamings.
 Import Stdlib.Relations.Relation_Operators.
 

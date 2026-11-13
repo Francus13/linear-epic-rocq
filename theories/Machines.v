@@ -7,8 +7,8 @@
   List
   Lia.
 
-From LEpic Require Import Syntax.
-From LEpic Require Import Contexts.
+From LinOpal Require Import Syntax.
+From LinOpal Require Import Contexts.
 
 Inductive obs :=
 | var (r: rvar)

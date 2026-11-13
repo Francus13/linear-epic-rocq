@@ -9,7 +9,7 @@ From Stdlib Require Import
   List
   Lia.
 
-From LEpic Require Import Contexts Syntax EvalContexts.
+From LinOpal Require Import Contexts Syntax EvalContexts.
 Import Renamings.
 Import Stdlib.Relations.Relation_Operators.
 
