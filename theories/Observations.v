@@ -1,55 +1,46 @@
-(* From Stdlib Require Import
+From Stdlib Require Import
   Arith   
-  Logic.FunctionalExtensionality         
+  Basics         
   Classes.RelationClasses
+  Logic.FunctionalExtensionality
   Morphisms
+  Nat
   Program.Basics
   List
   Lia.
 
-From LEpic Require Import Syntax.
-From LEpic Require Import Contexts.
+From LEpic Require Import Contexts Syntax EvalContexts Semantics Preservation.
+Import Renamings.
+Import Stdlib.Relations.Relation_Operators.
 
+Local Open Scope program_scope.
+Local Open Scope bool_scope.
+
+(* Observations describe data that escapes to the environment.
+   Every free rvar has exactly one obs,
+   and every free fvar has a multiset of obs.
+   Multisets here are functions to nat,
+   returning how many instances of the argument are in the multiset. *)
 Inductive obs :=
-| var (r: rvar)
+| var (r : rvar)
 | emp
-| tup (o1 o2: obs)
-| dcl (mc: maybe_closed) (e: effect)
-| lam (mc: maybe_closed) (es: list effect) (o: obs)
+| tup (o1 o2 : obs)
+| dcl (c : is_closed) (e : effect)
+| lam (c : is_closed) (es : list effect) (o : obs)
 with
 effect := 
-| eff (f: fvar) (os: list obs)
+| eff (f : fvar) (os : list obs)
 with
-maybe_closed := 
+is_closed := 
 | closed
-| open (rs: list rvar)
+| open
 .
 
-Definition machine := prod obs term.
-
-Inductive wf_machine : machine -> Prop :=
-| wf_mach :
-  forall m n
-    (G : lctxt m)
-    (D : lctxt n)
-    (o : obs)
-    (t : term),
-    wf_observation o ->
-    wf_term m n G D t ->
-    wf_machine (o, t)
-
-with wf_observation : obs -> Prop :=
-| wf_obs :
-  forall
-    (o : obs),
-    wf_observation o
-.
-
-Inductive machine_strict_step : machine -> machine -> Prop :=
-| term_step :
-  forall m n
-    (o1 o2 : obs)
-    (t1 t2 : term),
-    step m n t1 t2 ->
-    machine_strict_step (o1 t1) (o2 t2)
-. *)
+Fixpoint eq_obs (o1 o2 : obs) : bool :=
+  match (o1, o2) with
+  | (var r, var r) => true
+  | (emp, emp) => true
+  | (tup oA oB, tup oC oD) => Bool.and (eq_obs oA oC) (eq_obs oB oD)
+  | (dcl c e1, dcl c e2) => eq_effect e1 e2
+  | (lam c es1 o1', lam c es2 o2') => 
+  end.
