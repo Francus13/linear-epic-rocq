@@ -10,7 +10,7 @@ From Stdlib Require Import
   Lia
   Relations.
 
-From LEpic Require Import Contexts Syntax.
+From LinOpal Require Import Contexts Syntax.
 Import Renamings.
 
 Local Open Scope program_scope.

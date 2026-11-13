@@ -9,7 +9,7 @@ From Stdlib Require Import
   List
   Lia.
 
-From LEpic Require Import Contexts.
+From LinOpal Require Import Contexts.
 Import Renamings.
 
 Local Open Scope program_scope.

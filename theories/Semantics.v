@@ -9,7 +9,7 @@ From Stdlib Require Import
   List
   Lia.
 
-From LEpic Require Import Contexts Syntax EvalContexts.
+From LinOpal Require Import Contexts Syntax EvalContexts.
 Import Renamings.
 Import Stdlib.Relations.Relation_Operators.
 
@@ -749,6 +749,13 @@ Inductive prim_step : term -> term -> Prop :=
     prim_step
       (Et <=[ req r1 r2 ])
       ((rename_at_hole_scope n r1 r2 Et) <=[ nul ])
+
+| step_req :    (*  Et <=[ r1 = r2 ]  -->  (rename_at_hole_scope Et r1 r2) <=[ nul ]  *)
+  forall Et r1 r2 o,
+    prim_step
+      (Et <=[ par (req r1 r2)
+                  (def r1 o) ])
+      (Et <=[ def r2 o ])
 
 (* No motivating reason to have right now *)
 (* | step_remove_function :

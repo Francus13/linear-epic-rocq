@@ -2,13 +2,13 @@
 
 A survey of papers whose languages reduce nondeterministically under evaluation
 contexts and that prove confluence (or determinacy). They are sorted by how closely
-they match LEpic, where `step` is a primitive step taken up to `≈t` and linearity
+they match LinOpal, where `step` is a primitive step taken up to `≈t` and linearity
 rules out interference between redexes.
 
 Entries marked *(from memory)* are standard references that were not re-checked
 against a source when this survey was compiled (2026-10-20). The rest were.
 
-## 1. Closest to LEpic: linearity gives confluence
+## 1. Closest to LinOpal: linearity gives confluence
 
 - **Fowler, Kokke, Dardha, Lindley, Morris, "Separating Sessions Smoothly"**
   (CONCUR 2021; LMCS 19(3), 2023). This is the best template. HGV is a linear
@@ -21,11 +21,11 @@ against a source when this survey was compiled (2026-10-20). The rest were.
   Neither is mechanized.
 - **Kobayashi, Pierce, Turner, "Linearity and the Pi-Calculus"** (POPL 1996;
   TOPLAS 21(5), 1999). Communication on linear channels gives **partial
-  confluence**. Their reduction contexts and structural congruence match LEpic's
+  confluence**. Their reduction contexts and structural congruence match LinOpal's
   `par`/`nul` and `≈t` closely. Kobayashi's follow-up TR96-02 adds partial
   deadlock-freedom.
 - **Lafont, "Interaction Nets"** (POPL 1990) *(from memory)*. Interaction nets have
-  one-step **strong confluence**, because every active pair is disjoint. If LEpic's
+  one-step **strong confluence**, because every active pair is disjoint. If LinOpal's
   tup/emp cuts behave like interaction rules, this is the cleanest confluence
   argument to borrow.
 

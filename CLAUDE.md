@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-A Rocq (Coq) formalization of a linear, opportunistic lambda calculus ("LEpic"). It targets **Rocq 9.0**, uses the `Stdlib` library (`From Stdlib Require Import ...`, not `Coq.`), and `Permutations.v` also needs the `Equations` plugin. This is research code: proofs are still in progress, and some lemmas end in `Admitted` or contain `admit`.
+A Rocq (Coq) formalization of a linear, opportunistic lambda calculus ("LinOpal"). It targets **Rocq 9.0**, uses the `Stdlib` library (`From Stdlib Require Import ...`, not `Coq.`), and `Permutations.v` also needs the `Equations` plugin. This is research code: proofs are still in progress, and some lemmas end in `Admitted` or contain `admit`.
 
 **Toolchain:** use the `default` opam switch, which has Rocq 9.0.0 compiled with OCaml 5.3.0, `rocq-equations` and `vsrocq-language-server`. VSRocq uses `~/.opam/default/bin/vsrocqtop` (the `vsrocq.path` setting in the Windows VSCode user settings). The `.vo` files must be compiled by the same Rocq/OCaml build that VSRocq runs. If VSRocq reports "compiled with OCaml X while this instance … compiled with OCaml Y", delete the stale `.vo` files and rebuild. `make clean` does not remove `.vo` files of files that aren't in `_CoqConfig`, and make treats an old `.vo` as up to date.
 
@@ -14,11 +14,11 @@ Run these from the repo root:
 
 - `make`: builds every file listed in `_CoqConfig`. It first generates `_CoqProject` and `Makefile.rocq`.
 - `make clean`: removes the build outputs and the generated files.
-- Check one file and its dependencies: `make -f Makefile.rocq theories/Semantics.vo`. Or compile it directly with `rocq compile -Q theories LEpic theories/Semantics.v`, after its dependencies are built.
+- Check one file and its dependencies: `make -f Makefile.rocq theories/Semantics.vo`. Or compile it directly with `rocq compile -Q theories LinOpal theories/Semantics.v`, after its dependencies are built.
 
-To add or remove a file from the build, edit **`_CoqConfig`**. `_CoqProject` is generated from it, so edits to `_CoqProject` are overwritten. The logical path is `-Q theories LEpic`, so files import each other with `From LEpic Require Import ...`.
+To add or remove a file from the build, edit **`_CoqConfig`**. `_CoqProject` is generated from it, so edits to `_CoqProject` are overwritten. The logical path is `-Q theories LinOpal`, so files import each other with `From LinOpal Require Import ...`.
 
-`theories/Permutations.v`, `theories/Examples.v` and `theories/OldSemanticsProofs.v` are not in `_CoqConfig`, so `make` does not build them. To check one of them, compile it directly with `rocq compile -Q theories LEpic ...`. `OldSemanticsProofs.v` holds an older version of the semantics and its proofs, kept for reference.
+`theories/Permutations.v`, `theories/Examples.v` and `theories/OldSemanticsProofs.v` are not in `_CoqConfig`, so `make` does not build them. To check one of them, compile it directly with `rocq compile -Q theories LinOpal ...`. `OldSemanticsProofs.v` holds an older version of the semantics and its proofs, kept for reference.
 
 There is no test suite. A file is correct when it compiles. To list the proofs that are still open, run `grep -n "Admitted\|admit\." theories/*.v`.
 
