@@ -1690,7 +1690,45 @@ Proof.
   intros. apply Forall_map. eapply Forall_impl.
   2 : { apply H. }
   apply HR.
-Qed.  
+Qed.
+
+
+Lemma bij_ren_lctxt_rename :
+  forall {n} (r : ren n n) (HWB : wf_bij_ren r) (c : lctxt n),
+    lctxt_rename r c ≡[n] ren_compose (bij_inv r HWB) c.
+Proof.
+  intros.
+  unfold ctxt_eq; intros.
+  unfold ren_compose, compose.
+  destruct HWB; destruct b; destruct a; simpl.
+  unfold lctxt_rename.
+  enough (forall i, ((x1 x) < i <= n -> lctxt_rename_helper i r c x = c (x1 x))
+                /\  (i <= (x1 x) < n -> lctxt_rename_helper i r c x = 0)).
+  {
+    destruct (H0 n); clear H0 H2.
+    remember (w x); clear Heqa.
+    rewrite H1; auto; lia.
+  }
+  unfold ren_inverses in r0.
+  induction i; simpl; intros; split; intros; auto; try lia; destruct IHi.
+  - rewrite sum_correct.
+    destruct (Nat.eq_dec i (x1 x)); subst.
+    + destruct (r0 x); clear H4; destruct H3; auto.
+      rewrite H4, delta_id; auto.
+      rewrite H2; auto.
+      destruct (w x); lia.
+    + rewrite H1; try lia.
+      rewrite delta_neq; auto.
+      unfold not; intros.
+      assert (x1 (r i) = x1 x) by auto; clear H3.
+      destruct (r0 i); lia.
+  - rewrite sum_correct.
+    rewrite H2; try lia.
+    rewrite delta_neq; auto.
+    unfold not; intros.
+    assert (x1 (r i) = x1 x) by auto; clear H3.
+    destruct (r0 i); lia.
+Qed.
 
   
 End Renamings.  

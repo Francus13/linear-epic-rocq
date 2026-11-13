@@ -35,25 +35,14 @@ end.
 
 (* Extending Renamings and Contexts ---------------------------------------------------------- *)
 
-(* FRAN: This is inconsistent in canonicity with ren_id,
-    since it weakens variables out of scope.
-    Update: It actually needs to weaken variables out of scope
-    so that we don't need to track the free variables in the semantics.
-    Also why lt_dc instead of < (lt)? *)
-(* A renaming that changes the last m variables to (m + m'') *)
-Definition weaken_tail_ren (m m' m'' : nat) : ren (m' + m) (m' + m'' + m) :=
-  fun f =>
-    if lt_dec f m' then f 
-    else f + m''.
-
+(* A renaming that adds n to every variable *)
 Definition weaken_ren (m n : nat) : ren m (n + m) :=
-  weaken_tail_ren m 0 n.
-
+  fun x => x + n.
 
 Lemma weaken_ren_wf_ren :
   forall m n,
     wf_ren (weaken_ren m n).
-Proof. unfold wf_ren, weaken_ren, weaken_tail_ren; intros; split; intros; lia_goal. Qed.
+Proof. unfold wf_ren, weaken_ren; intros; split; intros; lia. Qed.
 
 Lemma weaken_ren_lctxt_rename :
   forall m n (c : lctxt m),
@@ -66,7 +55,7 @@ Proof.
                  /\ (forall x, (n + i) <= x -> lctxt_rename_helper i R c x = 0)).
   { apply H; lia. }
   assert (forall i, weaken_ren m n i = n + i) by
-      (intros; unfold weaken_ren, weaken_tail_ren; destruct (lt_dec i 0); lia).
+      (intros; unfold weaken_ren; lia).
   unfold ctxt_eq, R, c_new in *; induction i; simpl; intros; split; intros.
   all: try solve [solve_ctxt_eq; auto].
   all: destruct IHi.
@@ -83,7 +72,7 @@ Qed.
 (* A renaming that commutes two adjacent variable spaces 
     (m1 and m2 in length) starting after m0 variables *)
 Definition ren_commute_str m0 m1 m2 m3 : 
-        ren (m0 + (m1 + m2) + m3) (m0 + (m2 + m1) + m3) :=
+        ren (m0 + m1 + m2 + m3) (m0 + m1 + m2 + m3) :=
   fun x =>
     if (lt_dec x m0) then x 
     else if (lt_dec x (m0 + m1)) then (x + m2)
@@ -95,6 +84,19 @@ Lemma ren_commute_str_wf_ren :
   forall m0 m1 m2 m3,
     wf_ren (ren_commute_str m0 m1 m2 m3).
 Proof. unfold wf_ren, ren_commute_str; intros; split; intros; lia_goal. Qed.
+
+Lemma ren_commute_str_wf_bij_ren :
+  forall m0 m1 m2 m3,
+    wf_bij_ren (ren_commute_str m0 m1 m2 m3).
+Proof. 
+  unfold wf_bij_ren; intros; split; intros; try apply ren_commute_str_wf_ren.
+  unfold bij_ren.
+  exists (ren_commute_str m0 m2 m1 m3); split.
+  - replace (m0 + m1 + m2 + m3) with (m0 + m2 + m1 + m3) by lia.
+    apply ren_commute_str_wf_ren.
+  - unfold ren_inverses; intros; split; intros; split.
+    all: unfold ren_commute_str; lia_goal.
+Qed.
 
 Lemma ren_commute_str_lctxt_rename :
   forall m0 m1 m2 m3 (c0 : lctxt m0) (c1 : lctxt m1) (c2 : lctxt m2) (c3 : lctxt m3),
@@ -162,236 +164,6 @@ Qed.
 
 (* Operational Semantics --------------------------------------------------- *)
 
-(* Replaces x for y or y for x if either are below n.
-    If neither are below n, then it is just an identity renaming. 
-  To note, n_scope is only used in the renaming's type
-    and does not affect behavior, so 
-    forall x y, (rename_var x) = (rename_var y). *)
-Definition rename_var n_scope n (x:var) (y:var) : ren n_scope n_scope :=
-  fun z => if lt_dec x n
-           then if Nat.eq_dec z x
-                then y
-                else z
-           else if lt_dec y n
-           then if Nat.eq_dec z y
-                then x
-                else z
-           else z.
-
-(* The appropriate n_scope is not given,
-    but can be replaced via rewrite since rename_var
-    does not depend on its first argument.
-    Hence, n_scope just uses n. *)
-Definition rename_at_hole_scope n r1 r2 Et :=
-  let apply_ren := (rename_rvar_EC_proc (rename_var n n r1 r2)) in
-  mutate_under_hole_scope apply_ren Et.
-
-
-
-Lemma rename_var_wf :
-  forall n_scope n x y,
-    n <= n_scope ->
-    x < n_scope ->
-    y < n_scope ->
-    wf_ren (rename_var n_scope n x y).
-Proof. unfold wf_ren, rename_var; intros; split; lia_goal. Qed.
-
-Lemma rename_var_correct :
-  forall n_scope n x y,
-    x < n \/ y < n ->
-    rename_var n_scope n x y x = rename_var n_scope n x y y.
-Proof. intros; unfold rename_var; lia_goal. Qed.
-
-Lemma rename_var_correct_y :
-  forall n_scope n x y,
-    x < n ->
-    rename_var n_scope n x y y = y.
-Proof. intros; unfold rename_var; lia_goal. Qed.
-
-Lemma rename_var_correct_x :
-  forall n_scope n x y,
-    ~ (x < n) ->
-    rename_var n_scope n x y x = x.
-Proof. intros; unfold rename_var; lia_goal. Qed.
-
-Lemma rename_var_wf_hs_fun :
-  forall Et m_hol n_hol G_hol x y,
-    let n := get_rvars_Et Et in
-    (* n <= n_hol -> *)
-    x < n_hol ->
-    y < n_hol ->
-    x < n \/ y < n ->
-    let ren_fun := mutate_under_hole_scope
-        (rename_rvar_EC_proc (rename_var n_hol n x y)) in
-    wf_hs_fun ren_fun Et m_hol n_hol G_hol (one n_hol x ⨥ one n_hol y)
-                      m_hol n_hol G_hol (zero n_hol).
-Proof.
-  unfold wf_hs_fun; intros.
-  unfold mutate_under_hole_scope, mutate_hole_scope.
-  rewrite inv_hole_scope_at_top; auto.
-  inversion H3; clear H3; existT_eq; subst; simpl in *.
-
-  assert (x < n0 -> D x = 2) as HDx.
-  {
-    intros; apply min_rvar_hs_EC_wf with (r := x) in WFP; auto.
-    unfold one in WFP; 
-        rewrite sum_correct, delta_id in WFP; auto.
-    rewrite ctxt_app_l in WFP; auto.
-    specialize UD with x; lia.
-  }
-  assert (y < n0 -> D y = 2) as HDy.
-  {
-    intros; apply min_rvar_hs_EC_wf with (r := y) in WFP; auto.
-    unfold one in WFP; 
-        rewrite sum_correct, delta_id in WFP; auto.
-    rewrite ctxt_app_l in WFP; auto.
-    specialize UD with y; lia.
-  }
-
-  assert (WFP' := WFP); apply wf_hs_var_bounds_eq_proc in WFP'; auto.
-  destruct WFP'; subst.
-
-  apply rename_rvar_pres_wf_hs_EC 
-      with (R := (rename_var (n0 + n) n0 x y)) in WFP; auto.
-  2: apply rename_var_wf; auto; lia.
-
-  unfold one in WFP.
-  rewrite lctxt_rename_sum in WFP.
-  repeat (rewrite lctxt_rename_delta in WFP; auto).
-  rewrite rename_var_correct in WFP; auto.
-  rewrite delta_sum in WFP; simpl in WFP.
-
-  assert (forall D j k r o, j <= r -> j <= k ->
-            @lctxt_rename_helper (n0 + n) (n0 + n) j
-            (fun z : var => if Nat.eq_dec z r then o else z)
-            (@ctxt_app _ n0 n D (flat_ctxt 1 n)) k = 0)
-      as LRH1.
-  {
-    induction j; simpl; intros.
-    - unfold zero; auto.
-    - rewrite sum_correct.
-      destruct (Nat.eq_dec j r); try lia.
-      rewrite delta_neq; auto; try lia.
-      rewrite IHj; lia.
-  }
-  assert (forall D j k r o, r < j <= k -> r < n0 ->
-            @lctxt_rename_helper (n0 + n) (n0 + n) j
-            (fun z : var => if Nat.eq_dec z r then o else z)
-            (@ctxt_app _ n0 n D (flat_ctxt 1 n)) k =
-            (n0 + n) [o ↦ D r] k)
-      as LRH2.
-  {
-    induction j; simpl; intros; try lia.
-    rewrite sum_correct.
-    destruct (Nat.eq_dec j r); subst.
-    - rewrite LRH1; try lia.
-      rewrite ctxt_app_l; lia.
-    - rewrite IHj; try lia.
-      rewrite delta_neq; lia.
-  }
-
-  assert (forall D r o, r < n0 -> o < n0 + n ->
-  forall i,
-      (i <= r ->
-        @lctxt_rename_helper (n0 + n) (n0 + n) i
-              (fun z => if Nat.eq_dec z r then o else z)
-              (@ctxt_app _ n0 n D (flat_ctxt 1 n))
-        ≡[i] @ctxt_app _ n0 n D (flat_ctxt 1 n))
-  /\  (r < i <= n0 + n ->
-        @lctxt_rename_helper (n0 + n) (n0 + n) i
-              (fun z => if Nat.eq_dec z r then o else z)
-              (@ctxt_app _ n0 n D (flat_ctxt 1 n))
-        ≡[i] (@ctxt_app _ n0 n
-                (fun z => if Nat.eq_dec z r then 0 else D z)
-                (flat_ctxt 1 n)) 
-              ⨥ (n0 + n)[o ↦ D r]))
-      as LRH.
-  {
-    intros. unfold ctxt_eq; induction i; try (split; lia).
-    destruct IHi; simpl. split; intros; rewrite sum_correct.
-    - destruct (Nat.eq_dec i r); try lia.
-      destruct (Nat.eq_dec x0 i); subst.
-      + rewrite delta_id; try lia. rewrite LRH1; lia.
-      + rewrite delta_neq; auto; simpl.
-        rewrite H5; auto; try lia.
-    - destruct (Nat.eq_dec i r); destruct (Nat.eq_dec x0 i); subst.
-      + rewrite LRH1; auto. rewrite Nat.add_0_r.
-        rewrite sum_correct.
-        repeat (rewrite ctxt_app_l; auto).
-        destruct (Nat.eq_dec r r); lia.
-      + rewrite H5; try lia.
-        rewrite sum_correct.
-        repeat (rewrite ctxt_app_l; try lia).
-        destruct (Nat.eq_dec x0 r); lia.
-      + rewrite delta_id; try lia.
-        rewrite sum_correct.
-        rewrite LRH2; try lia.
-        destruct (lt_dec i n0).
-        * repeat (rewrite ctxt_app_l; auto).
-          destruct (Nat.eq_dec i r); lia.
-        * repeat (rewrite ctxt_app_r; auto); lia.
-      + rewrite H6; try lia.
-        rewrite delta_neq; auto.
-  }
-  clear LRH1 LRH2.
-
-  assert (forall D r o, r < n0 -> o < n0 + n ->
-    @lctxt_rename (n0 + n) (n0 + n)
-                  (fun z => if Nat.eq_dec z r then o else z)
-                  (@ctxt_app _ n0 n D (flat_ctxt 1 n))
-        ≡[n0 + n] (@ctxt_app _ n0 n 
-                (fun z => if Nat.eq_dec z r then 0 else D z)
-                (flat_ctxt 1 n)) 
-              ⨥ (n0 + n)[o ↦ D r])
-      as LR.
-  {
-    intros. destruct (LRH D0 r o H3 H4 (n0 + n)); clear LRH H5.
-    unfold lctxt_rename. rewrite H6; try lia; reflexivity.
-  }
-  clear LRH.
-
-  unfold rename_var in WFP at 1.
-  destruct (lt_dec x n0).
-  - clear H1 HDy. rewrite LR in WFP; auto; clear LR.
-    rewrite rename_var_correct_y in WFP; auto.
-    rewrite HDx in WFP; auto; clear HDx.
-
-    apply rem_hole_rvar_EC_wf with 
-        (r := y) (D_hol' := (zero (n0 + n))) in WFP;
-        eauto.
-    2: now rewrite sum_zero_l.
-    dest_conj_disj_exist.
-    1: rewrite ren_pres_hs_proc in H1; now rewrite H1 in H2.
-
-    apply ctxt_eq_sum_inv in H3.
-    rewrite <- H3 in H4; clear H3.
-    eapply wf_Ebag with (D := 
-        (fun z : var => if Nat.eq_dec z x then 0 else D z)); eauto.
-    intros. destruct (Nat.eq_dec x1 x); auto.
-  - destruct (lt_dec y n0); try lia; clear H1 HDx.
-    rewrite LR in WFP; auto; clear LR.
-
-    rewrite <- rename_var_correct, rename_var_correct_x in WFP; auto.
-    rewrite HDy in WFP; auto; clear HDy.
-
-    apply rem_hole_rvar_EC_wf with 
-        (r := x) (D_hol' := (zero (n0 + n))) in WFP;
-        eauto.
-    2: now rewrite sum_zero_l.
-    dest_conj_disj_exist.
-    1: rewrite ren_pres_hs_proc in H1; now rewrite H1 in H2.
-
-    apply ctxt_eq_sum_inv in H3.
-    rewrite <- H3 in H4; clear H3.
-    eapply wf_Ebag with (D := 
-        (fun z : var => if Nat.eq_dec z y then 0 else D z)); eauto.
-    intros. destruct (Nat.eq_dec x1 y); auto.
-Qed.
-
-
-
-
-
 
 
 (* Helper functions for function application *)
@@ -444,7 +216,7 @@ Proof.
     now repeat rewrite app_zero
   ].
   all: try solve [
-    unfold ren_shift, ren_id, weaken_ren, weaken_tail_ren;
+    unfold ren_shift, ren_id, weaken_ren;
     solve_ctxt_eq
   ].
 
@@ -459,7 +231,7 @@ Proof.
     now rewrite <- ctxt_app_assoc, app_zero.
 
   (* Bng base case for renaming *)
-  - clear HD; unfold ren_shift, weaken_ren, ren_id, weaken_tail_ren in *.
+  - clear HD; unfold ren_shift, weaken_ren, ren_id in *.
     solve_ctxt_eq; subst.
     1, 2, 3: specialize HG with x; solve_ctxt_eq.
     1, 3: replace (x - (m + m_new)) with (x - m_new - m) by lia;
@@ -493,7 +265,7 @@ Proof.
   ].
   all:
     try rename HD into H;
-    unfold ren_shift, ren_id, weaken_ren, weaken_tail_ren in *; 
+    unfold ren_shift, ren_id, weaken_ren in *; 
     solve_ctxt_eq; subst;
     try rename x into x3;
     try solve [try specialize H with x3;
@@ -669,38 +441,14 @@ Definition shift_hs_by_term_vars (t : term) (Et : EC_term) : EC_term :=
 
 
 
-(* Helper functions for garbage collecting functions *)
-
-(* Returns true if P contains a call to f, false otherwise *)
-Fixpoint contains_fvar_call f P :=
-  match P with
-  | def _ (lam (bag m _ P')) => contains_fvar_call (m + f) P'
-  | par P1 P2 => contains_fvar_call f P1 || contains_fvar_call f P2
-  | app f' _ => f =? f'
-  | _ => false
-  end.
-
-(* Returns true if Et contains no call to f, assuming f is bound in the 
-   hole scope of Et. Returns false otherwise. *)
-Definition can_remove_function f Et :=
-  let P := get_proc ((hole_scope Et) <=[ nul ]) in
-  negb (contains_fvar_call f P).
-
-
-
-
-
-
-
-
 (* Small Step *)
               
 Inductive prim_step : term -> term -> Prop :=
-| step_par_nul :    (*  Et <=[ P | nul ]  -->  Et <=[ P ]  *)
+(* | step_par_nul :    (*  Et <=[ P | nul ]  -->  Et <=[ P ]  *)
   forall Et P,
     prim_step
       (Et <=[ par P nul ])
-      (Et <=[ P ])
+      (Et <=[ P ]) *)
 
 | step_emp_cut :    (*  Et <=[ r <- () | r <- () ]  -->  Et <=[ nul ]  *)
   forall Et r,
@@ -713,6 +461,24 @@ Inductive prim_step : term -> term -> Prop :=
     prim_step
       (Et <=[ par (def r (tup r1 r2)) (def r (tup r1' r2')) ])
       (Et <=[ par (req r1 r1') (req r2 r2') ])
+
+| step_req_def :    (*  Et <=[ r1 = r2 | r1 <- o ]  -->  Et <=[ r2 <- o ]  *)
+  forall Et r1 r2 o,
+    prim_step
+      (Et <=[ par (req r1 r2) (def r1 o) ])
+      (Et <=[ def r2 o ])
+
+| step_req_app :    (*  Et <=[ r1 = r2 | f r1 ]  -->  Et <=[ f r2 ]  *)
+  forall Et r1 r2 f,
+    prim_step
+      (Et <=[ par (req r1 r2) (app f r1) ])
+      (Et <=[ app f r2 ])
+
+| step_req_req :    (*  Et <=[ r1 = r2 | r1 = r ]  -->  Et <=[ r2 = r ]  *)
+  forall Et r1 r2 r,
+    prim_step
+      (Et <=[ par (req r1 r2) (req r1 r) ])
+      (Et <=[ req r2 r ])
       
 | step_app_same_scope :    (*  Et <=[ rf <- lam r'. t | rf <- ?f | f r ]  *)
   forall Et t f rf r,    (*  -->  Et <=[ '' | '' | fresh_body(t){r=r'} ]  *)
@@ -741,21 +507,6 @@ Inductive prim_step : term -> term -> Prop :=
     prim_step
       (Et_fun <=[ def rl (lam (Et         <=[ app f' r ])) ])
       (Et_fun <=[ def rl (lam (Et_shifted <=[ new_body ])) ])
-
-| step_req :    (*  Et <=[ r1 = r2 ]  -->  (rename_at_hole_scope Et r1 r2) <=[ nul ]  *)
-  forall Et r1 r2,
-    let n := bound_rvars_at_hole_scope Et in
-    r1 < n \/ r2 < n ->
-    prim_step
-      (Et <=[ req r1 r2 ])
-      ((rename_at_hole_scope n r1 r2 Et) <=[ nul ])
-
-| step_req :    (*  Et <=[ r1 = r2 ]  -->  (rename_at_hole_scope Et r1 r2) <=[ nul ]  *)
-  forall Et r1 r2 o,
-    prim_step
-      (Et <=[ par (req r1 r2)
-                  (def r1 o) ])
-      (Et <=[ def r2 o ])
 
 (* No motivating reason to have right now *)
 (* | step_remove_function :
