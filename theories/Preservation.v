@@ -268,7 +268,7 @@ Proof.
           lctxt_rename Rf (@ctxt_app _ m0 (m1 + m_free) G8 (zero (m1 + m_free)))). {
         rewrite <- (ctxt_app_null_l (zero 0) (G8 ⊗ zero (m1 + m_free))), <- app_zero.
         repeat rewrite ctxt_app_assoc.
-        replace (m1 + m0 + m_free) with (0 + m1 + m0 + m_free) by lia.
+        replace (m1 + m0 + m_free) with (0 + m0 + m1 + m_free) by lia.
         subst; rewrite ren_commute_str_lctxt_rename.
         simpl; now rewrite ctxt_app_null_l.
       }

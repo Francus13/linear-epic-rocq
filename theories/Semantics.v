@@ -103,7 +103,7 @@ Lemma ren_commute_str_lctxt_rename :
   let R := ren_commute_str m0 m1 m2 m3 in
   let c_old := @ctxt_app _ (m0 + m1 + m2) m3 (c0 ⊗ c1 ⊗ c2) c3 in
   let c_new := @ctxt_app _ (m0 + m2 + m1) m3 (c0 ⊗ c2 ⊗ c1) c3 in
-    lctxt_rename R c_old ≡[m0 + m2 + m1 + m3] c_new.
+    lctxt_rename R c_old ≡[m0 + m1 + m2 + m3] c_new.
 Proof.
   intros. unfold lctxt_rename.
   enough (forall i, 
@@ -121,14 +121,13 @@ Proof.
                         @ctxt_app _ (m0 + m2 + m1) m3 (c0 ⊗ c2_build ⊗ c1) c3)
                  /\ (forall x, cur_limit <= x -> lctxt_rename_helper i R c_old x = 0)).
   {
-    destruct (H (m0 + m2 + m1 + m3)); clear H H1. 
-    assert (m0 + m2 + m1 + m3 <= m0 + m1 + m2 + m3) by lia.
-    apply H0 in H; clear H0.
-    replace (m0 + (m1 + m2) + m3) with (m0 + m2 + m1 + m3) in * by lia.
-    assert ((fun x : nat => if lt_dec x (m0 + m2 + m1 + m3 - m0 - m1 + 1) then c2 x else 0) ≡[m2] c2).
-    { unfold ctxt_eq; intros; destruct (lt_dec x (m0 + m2 + m1 + m3 - m0 - m1 + 1)); lia. }
-    unfold c_old, c_new in *.
+    destruct (H (m0 + m1 + m2 + m3)); clear H H1. 
+    assert (m0 + m1 + m2 + m3 <= m0 + m1 + m2 + m3) by lia; apply H0 in H; clear H0.
+    replace (m0 + m2 + m1 + m3) with (m0 + m1 + m2 + m3) in * by lia.
+    assert ((fun x : nat => if lt_dec x (m0 + m1 + m2 + m3 - m0 - m1) then c2 x else 0) ≡[m2] c2)
+      by solve_ctxt_eq.
     unfold ctxt_eq in *; intros; specialize H with x; specialize H0 with (x - m0 - m1).
+    unfold c_new; clear c_new.
     lia_destruct; rewrite H; solve_ctxt_eq.
   }
   
