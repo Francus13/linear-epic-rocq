@@ -4,6 +4,5 @@ theories/Contexts.v
 theories/Syntax.v
 theories/EvalContexts.v
 theories/Semantics.v
-theories/Preservation.v
-theories/Confluence.v
 theories/Observations.v
+theories/Confluence.v

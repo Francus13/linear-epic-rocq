@@ -9,7 +9,7 @@ From Stdlib Require Import
   List
   Lia.
 
-From LinOpal Require Import Contexts Syntax EvalContexts Semantics Preservation.
+From LinOpal Require Import Contexts Syntax EvalContexts Semantics.
 Import Renamings.
 Import Stdlib.Relations.Relation_Operators.
 
@@ -43,4 +43,6 @@ Fixpoint eq_obs (o1 o2 : obs) : bool :=
   | (tup oA oB, tup oC oD) => Bool.and (eq_obs oA oC) (eq_obs oB oD)
   | (dcl c e1, dcl c e2) => eq_effect e1 e2
   | (lam c es1 o1', lam c es2 o2') => 
-  end.
+  end
+with eq_effect :=
+  

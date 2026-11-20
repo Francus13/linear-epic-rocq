@@ -13,8 +13,7 @@ From LinOpal Require Import
   Contexts
   Syntax
   EvalContexts
-  Semantics
-  Preservation.
+  Semantics.
 
 Import Renamings.
 Import Stdlib.Relations.Relation_Operators.
@@ -228,7 +227,12 @@ ok ops:
 
 t -> t1 and t -> t2
 then t1 ->* t1' and t2 ->* t2'
-and t1 =o= t2.
+and t1' =o= t2'.
+
+
+t1 =o= t2 :=
+exists t12, t21, t1 ->* t12, t2 ->* t21
+[[t12]] >= [[t2]] /\ [[t21]] >= [[t1]]
 
 
 
@@ -318,8 +322,21 @@ wf _ n t
 
 
 t -> t1      t -> t2
+
+Obs :=
 exists t12, t21, t1 ->* t12, t2 ->* t21
 [[t12]] >= [[t2]] /\ [[t21]] >= [[t1]]
+
+bisimF R t1 t2 :=
+  (if t1 -> t1' then exists t2', t2 -> t2' /\ Obs t1' t2' /\ R t1' t2')
+  /\ symm
+
+bisim := gfp bisimF
+
+confluence :=
+forall t t1 t2,
+  t -> t1 /\ t -> t2 ->
+  bisim t1 t2
 
 
 
@@ -378,7 +395,7 @@ Inductive obs_prim_step : term -> term -> Prop :=
   forall Et r,
     is_hole_scope_at_top Et = true ->
     obs_prim_step
-      (Et <=[ par (deobs_f r emp) (def r emp) ])
+      (Et <=[ par (def r emp) (def r emp) ])
       (Et <=[ nul ])
 
 | obs_step_tup_cut :    (*  Et <=[ r <- (r1, r2) | r <- (r1', r2') ]  *)
