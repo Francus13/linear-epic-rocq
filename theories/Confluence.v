@@ -323,22 +323,31 @@ wf _ n t
 
 t -> t1      t -> t2
 
-Obs :=
+CanJoin t1 t2 :=
 exists t12, t21, t1 ->* t12, t2 ->* t21
 [[t12]] >= [[t2]] /\ [[t21]] >= [[t1]]
 
 bisimF R t1 t2 :=
-  (if t1 -> t1' then exists t2', t2 -> t2' /\ Obs t1' t2' /\ R t1' t2')
-  /\ symm
+  CanJoin t1 t2 /\
+  (if t1 -> t1' then exists t2', t2 -> t2' /\ R t1' t2') /\
+  (if t2 -> t2' then exists t1', t1 -> t1' /\ R t1' t2')
 
 bisim := gfp bisimF
 
 confluence :=
 forall t t1 t2,
-  t -> t1 /\ t -> t2 ->
+  t -> t1 /\ t -> t2 implies
   bisim t1 t2
 
 
+
+
+
+
+
+Expressing Mobilityin Process Algebras: First-Order and Higher-Order Paradigms
+by Davide Sangiorgi
+https://core.ac.uk/download/429709839.pdf
 
 
 *)

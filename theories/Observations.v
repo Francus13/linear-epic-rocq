@@ -175,3 +175,11 @@ Proof.
   (* [3;1;2] -> [3;2;1] *)
   apply sm_elem; [reflexivity | apply sm_swap].
 Qed.
+
+
+
+(* Relating terms and observations *)
+
+(* Fixpoint is_escaping_channel (m n : nat) (r : rvar) 
+
+Inductive observe_channel  *)
